@@ -3,10 +3,10 @@
 ## Current state (2026-11-01, Issue #19)
 
 - Directive baseline: 71 commits on `main` at `bb17403`; 130 additional meaningful commits would be needed to reach 201. This is a target, not a reason to create filler commits.
-- Issue: [#19 — Implement gesture-driven app switching](https://github.com/dltldn1234/AirControl-Windows/issues/19). Branch `19-feat/gesture-app-switching` is based on current `main` and has four local commits, not yet pushed.
+- Issue: [#19 — Implement gesture-driven app switching](https://github.com/dltldn1234/AirControl-Windows/issues/19). Branch `19-feat/gesture-app-switching` is based on current `main` and has seven local commits, not yet pushed.
 - Added normalized three-finger pose gating, horizontal swipe distance/velocity limits, cooldown, no-repeat-until-pose-release, tracking-loss reset, mirrored coordinate handling, and deterministic cycling among eligible visible windows.
 - Window control settings include an opt-in app-switch toggle. Foreground activation continues to use `SetForegroundWindow`; policy denial is logged and ignored without bypass.
-- Local verification: Rust workspace 73 tests passed, rustfmt and Clippy with warnings denied passed; frontend typecheck, 17 Vitest tests, and Vite production build passed. Windows CI and real application activation still need verification.
+- Local verification: Rust workspace 73 tests passed, rustfmt and Clippy with warnings denied passed; frontend typecheck, 17 Vitest tests, Vite production build, and 5 Playwright tests passed. Windows CI and real application activation still need verification.
 - Next: push Issue #19 and open its PR, then wait for Windows CI before normal merge.
 
 ## Product roadmap toward 201+ meaningful commits
