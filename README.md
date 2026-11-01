@@ -2,7 +2,7 @@
 
 AirControl is a local-first Windows desktop application for controlling a PC with hand gestures. The Windows edition is built with Tauri 2, a Rust core, and a React + TypeScript interface.
 
-> **Development status:** the desktop shell, runtime status bridge, local preference storage, dashboard, opt-in native camera enumeration/preview, local ONNX palm plus 21-point hand landmark inference, cursor/mouse gestures, window control, Air Keyboard, gesture-driven app switching, and cursor calibration are implemented. Named control profiles are in progress in Issue #23. Camera, keyboard IME, window activation, and physical cursor behavior still need Windows PC validation.
+> **Development status:** the desktop shell, runtime status bridge, local preference storage, dashboard, opt-in native camera enumeration/preview, local ONNX palm plus 21-point hand landmark inference, cursor/mouse gestures, window control, Air Keyboard, gesture-driven app switching, and cursor calibration are implemented. Named profiles and opt-in application-specific profile selection are implemented in Issue #25. Windows hardware behavior remains unverified on this macOS development host. Camera, keyboard IME, window activation, and physical cursor behavior still need Windows PC validation.
 
 ## Technology
 
@@ -47,7 +47,7 @@ npm run test:e2e
 - `e2e`: browser-level UI checks; these do not replace testing the Windows WebView2 app.
 
 React does not generate operating-system input. Cursor, window, and keyboard control belongs in Rust services behind explicit readiness and user activation gates.
-Named control profiles and built-in presets are stored locally; see [control profiles](docs/CONTROL_PROFILES.md).
+Named control profiles and optional executable-to-profile mappings are stored locally; see [control profiles](docs/CONTROL_PROFILES.md).
 
 ## Privacy and safety
 
