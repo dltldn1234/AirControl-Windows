@@ -79,6 +79,12 @@ mod tests {
             cursor_sensitivity: 1.7,
             reverse_scroll_direction: true,
             right_click_enabled: false,
+            cursor_calibration: aircontrol_core::cursor::CursorCalibration {
+                left: 0.12,
+                top: 0.18,
+                right: 0.88,
+                bottom: 0.92,
+            },
             ..UserPreferences::default()
         };
         let saved = save_to_path(&path, requested.clone()).expect("save preferences");
@@ -103,6 +109,10 @@ mod tests {
 
         assert!(parsed.right_click_enabled);
         assert!(!parsed.app_switch_enabled);
+        assert_eq!(
+            parsed.cursor_calibration,
+            aircontrol_core::cursor::CursorCalibration::default()
+        );
     }
 
     #[test]
