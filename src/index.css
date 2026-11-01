@@ -140,6 +140,8 @@ h1 { margin-bottom:5px; color:#f1f2f5; font-size:24px; font-weight:610; letter-s
 .setting-control { display:flex; align-items:center; justify-content:space-between; gap:22px; min-height:65px; border-bottom:1px solid #292c33; }
 .setting-control strong { display:block; color:#dadde4; font-size:11px; font-weight:550; }
 .setting-control small { display:block; margin-top:4px; color:#828894; font-size:9px; }
+.calibration-heading { min-height:76px; }
+.calibration-heading .secondary-button { flex:none; }
 .range-control { display:flex; align-items:center; gap:12px; width:285px; }
 .range-control input { flex:1; accent-color:#91aef0; }
 .range-control output { min-width:37px; color:#b0b8c7; font-variant-numeric:tabular-nums; font-size:10px; text-align:right; }

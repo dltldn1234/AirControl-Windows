@@ -150,14 +150,15 @@ fn set_cursor_control(
         }
         let preferences = settings::load(&app)?;
         window_control.disable()?;
-        cursor.enable(
-            preferences.camera_mirrored,
-            preferences.cursor_sensitivity,
-            preferences.cursor_smoothing,
-            preferences.scroll_sensitivity,
-            preferences.reverse_scroll_direction,
-            preferences.right_click_enabled,
-        )?;
+        cursor.enable(cursor::CursorRuntimeSettings {
+            mirrored: preferences.camera_mirrored,
+            sensitivity: preferences.cursor_sensitivity,
+            smoothing: preferences.cursor_smoothing,
+            scroll_sensitivity: preferences.scroll_sensitivity,
+            reverse_scroll: preferences.reverse_scroll_direction,
+            right_click_enabled: preferences.right_click_enabled,
+            calibration: preferences.cursor_calibration,
+        })?;
         set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Cursor);
     } else {
         cursor.disable()?;
@@ -266,6 +267,7 @@ fn set_air_keyboard_control(
             preferences.camera_mirrored,
             preferences.cursor_sensitivity,
             preferences.cursor_smoothing,
+            preferences.cursor_calibration,
             bounds,
         ) {
             if let Some(window) = app.get_webview_window("air-keyboard") {

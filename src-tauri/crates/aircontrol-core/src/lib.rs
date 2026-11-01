@@ -1,3 +1,4 @@
+use crate::cursor::CursorCalibration;
 use serde::{Deserialize, Serialize};
 
 pub mod app_switch;
@@ -96,6 +97,7 @@ pub struct UserPreferences {
     pub right_click_enabled: bool,
     pub camera_mirrored: bool,
     pub app_switch_enabled: bool,
+    pub cursor_calibration: CursorCalibration,
     pub active_profile_id: String,
     pub profiles: Vec<ControlProfile>,
 }
@@ -193,6 +195,7 @@ impl Default for UserPreferences {
             right_click_enabled: true,
             camera_mirrored: true,
             app_switch_enabled: false,
+            cursor_calibration: CursorCalibration::default(),
             active_profile_id: "productivity".into(),
             profiles: ControlProfile::built_ins(),
         }
@@ -206,6 +209,7 @@ impl UserPreferences {
         self.pinch_sensitivity = finite_clamp(self.pinch_sensitivity, 0.6, 1.4, 1.0);
         self.window_sensitivity = finite_clamp(self.window_sensitivity, 0.4, 2.0, 1.0);
         self.scroll_sensitivity = finite_clamp(self.scroll_sensitivity, 0.4, 3.0, 1.0);
+        self.cursor_calibration = self.cursor_calibration.normalized();
         if self.profiles.is_empty() {
             self.profiles = ControlProfile::built_ins();
         }

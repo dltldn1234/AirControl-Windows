@@ -3,6 +3,7 @@ import { BUILT_IN_PROFILES, createControlProfile, deleteControlProfile, isValidP
 
 const preferences: UserPreferences = {
   ...BUILT_IN_PROFILES[0].settings,
+  cursorCalibration: { left: 0, top: 0, right: 1, bottom: 1 },
   activeProfileId: "productivity",
   profiles: BUILT_IN_PROFILES,
 };

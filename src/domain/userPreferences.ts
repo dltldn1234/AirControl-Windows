@@ -8,11 +8,12 @@ export interface UserPreferences {
   rightClickEnabled: boolean;
   cameraMirrored: boolean;
   appSwitchEnabled: boolean;
+  cursorCalibration: { left: number; top: number; right: number; bottom: number };
   activeProfileId: string;
   profiles: ControlProfile[];
 }
 
-export type ProfileSettings = Omit<UserPreferences, "activeProfileId" | "profiles">;
+export type ProfileSettings = Omit<UserPreferences, "activeProfileId" | "profiles" | "cursorCalibration">;
 
 export interface ControlProfile {
   id: string;
