@@ -3,9 +3,9 @@
 ## Repository baseline
 
 - Baseline commit count: 0 (empty repository at project start)
-- Current `main` commit count: 9; current Issue #5 branch contains 4 feature commits after the live 21-point update (13 commits reachable at HEAD).
-- Current issue: [#5 — Add local ONNX hand detection and landmark tracking](https://github.com/dltldn1234/AirControl-Windows/issues/5)
-- Current branch: `5-feat/onnx-hand-tracking`
+- Current `main` commit count: 14 after the ordinary merge of PR #6. Issue #5 contributed 4 feature commits and a merge commit.
+- Current issue: [#7 — Add safe Windows cursor movement and click dispatch](https://github.com/dltldn1234/AirControl-Windows/issues/7)
+- Current branch: `7-feat/windows-cursor-control` (12 commits ahead of `main` in PR #8; 25 commits reachable from this branch HEAD).
 - Active stack: Rust, Tauri 2, React, TypeScript, Vite, Tailwind CSS
 
 ## Completed
@@ -47,7 +47,7 @@
 ## Current follow-up (2026-11-01)
 
 - PR #6 for Issue #5 was merged with ordinary merge commit `382577f145803f890f040cad7a4044be729feecb`; `main` now has 14 commits. Its Windows executable build, Rust checks, frontend checks, and Playwright all passed in Windows CI.
-- Issue #7, `7-feat/windows-cursor-control`, is pushed with 11 focused commits on top of PR #6's merged head. It was developed in a separate worktree, preserving the original checkout's untracked `README 2.md` and `src/App 2.tsx`.
+- Issue #7, `7-feat/windows-cursor-control`, is pushed with 12 commits ahead of `main` and a draft PR #8. It is based on PR #6's hand-tracking head; the PR #6 merge commit remains on `main`. The separate worktree preserved the original checkout's untracked `README 2.md` and `src/App 2.tsx`.
 - Added pure virtual-desktop coordinate mapping for negative monitor origins, mirroring, bounds, sensitivity, and invalid geometry.
 - Added a hysteretic pinch state machine: short pinch clicks, sustained pinch starts drag, release or tracking loss ends drag, and cooldown avoids immediate rearming.
 - Added a One Euro cursor filter with an adjustable cutoff driven by the saved smoothing preference and a small dead zone; the filter resets after tracking loss.
