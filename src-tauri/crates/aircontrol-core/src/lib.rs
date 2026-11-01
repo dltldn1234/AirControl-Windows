@@ -7,6 +7,8 @@ pub enum CameraState {
     Stopped,
     Starting,
     Running,
+    RequestingPermission,
+    Enumerating,
     PermissionRequired,
     Unavailable,
     Error,

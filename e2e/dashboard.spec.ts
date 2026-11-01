@@ -8,10 +8,12 @@ test("dashboard clearly separates preview from the desktop runtime", async ({ pa
   await expect(page.getByRole("button", { name: /Start control/ })).toBeDisabled();
 });
 
-test("sidebar opens a feature page with an explicit implementation state", async ({ page }) => {
+test("camera page clearly separates native capture from browser preview", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Camera & tracking" }).click();
 
   await expect(page.getByRole("heading", { level: 1, name: "Camera & tracking" })).toBeVisible();
-  await expect(page.getByText("IN DEVELOPMENT")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Camera source" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Find cameras" })).toBeDisabled();
+  await expect(page.getByText("Open AirControl as a desktop app to access its camera service.")).toBeVisible();
 });

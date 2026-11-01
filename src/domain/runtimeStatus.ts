@@ -2,6 +2,8 @@ export type CameraState =
   | "stopped"
   | "starting"
   | "running"
+  | "requestingPermission"
+  | "enumerating"
   | "permissionRequired"
   | "unavailable"
   | "error";
@@ -24,6 +26,8 @@ export function cameraLabel(state: CameraState | "unavailable"): string {
     stopped: "Stopped",
     starting: "Starting",
     running: "Connected",
+    requestingPermission: "Permission needed",
+    enumerating: "Searching",
     permissionRequired: "Permission needed",
     unavailable: "Not connected",
     error: "Error",

@@ -1,5 +1,6 @@
 import {
   Activity,
+  AlertTriangle,
   AppWindow,
   ArrowUpRight,
   Camera,
@@ -15,11 +16,17 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Play,
+  RefreshCw,
+  Square,
+  Video,
   WandSparkles,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useRuntimeStore } from "./state/runtimeStore";
 import type { RuntimeSnapshot } from "./domain/runtimeStatus";
+import type { CameraDevice, CameraFrame, CameraStatusEvent } from "./domain/camera";
 import type { UserPreferences } from "./domain/userPreferences";
 import { cameraLabel, gestureLabel, trackingLabel } from "./domain/runtimeStatus";
 
@@ -147,6 +154,108 @@ function PlannedSection({ title }: { title: string }) {
   );
 }
 
+function CameraSection({
+  connection,
+  cameraState,
+  error,
+  listCameras,
+  startCamera,
+  stopCamera,
+  setCameraState,
+}: {
+  connection: "preview" | "connected" | "error";
+  cameraState: RuntimeSnapshot["camera"] | "unavailable";
+  error: string | null;
+  listCameras: () => Promise<CameraDevice[] | null>;
+  startCamera: (deviceId: string) => Promise<boolean>;
+  stopCamera: () => Promise<boolean>;
+  setCameraState: (state: RuntimeSnapshot["camera"]) => void;
+}) {
+  const [cameras, setCameras] = useState<CameraDevice[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState("");
+  const [frame, setFrame] = useState<CameraFrame | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const canUseCamera = connection === "connected";
+
+  useEffect(() => {
+    if (!canUseCamera) return;
+    let disposed = false;
+    let unlistenFrame: UnlistenFn | undefined;
+    let unlistenStatus: UnlistenFn | undefined;
+    void listen<CameraFrame>("camera-frame", (event) => {
+      setFrame(event.payload);
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else unlistenFrame = unlisten;
+    });
+    void listen<CameraStatusEvent>("camera-status", (event) => {
+      setCameraState(event.payload.state);
+      setMessage(event.payload.message ?? "");
+      if (event.payload.state === "stopped" || event.payload.state === "error") setFrame(null);
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else unlistenStatus = unlisten;
+    });
+    return () => {
+      disposed = true;
+      unlistenFrame?.();
+      unlistenStatus?.();
+    };
+  }, [canUseCamera, setCameraState]);
+
+  async function refreshCameras() {
+    setLoading(true);
+    setMessage("Requesting camera access and searching for devices…");
+    const devices = await listCameras();
+    setLoading(false);
+    if (devices === null) {
+      setMessage(error ?? "Camera permission is unavailable. Check Windows camera privacy settings and try again.");
+      return;
+    }
+    setCameras(devices);
+    setSelectedCamera(devices[0]?.id ?? "");
+    setMessage(devices.length === 0 ? "No cameras were found. Connect a camera and search again." : `${devices.length} camera${devices.length === 1 ? "" : "s"} found. Camera frames stay on this PC.`);
+  }
+
+  async function toggleCapture() {
+    if (cameraState === "running" || cameraState === "starting") {
+      await stopCamera();
+      return;
+    }
+    if (!selectedCamera) return;
+    setMessage("Starting camera preview…");
+    if (!(await startCamera(selectedCamera))) setMessage(error ?? "Camera could not be started.");
+  }
+
+  return (
+    <section className="camera-panel">
+      <div className="camera-preview-column">
+        <div className={`camera-stage ${frame ? "has-frame" : ""}`}>
+          {frame ? <img className="camera-frame" src={`data:image/jpeg;base64,${frame.jpegBase64}`} alt="Live camera preview" /> : <div className="camera-empty"><span><Video size={25} aria-hidden="true" /></span><strong>{cameraState === "running" ? "Waiting for the first frame" : "Camera preview is off"}</strong><small>Frames are processed and displayed locally.</small></div>}
+          <span className={`camera-live-badge ${cameraState === "running" ? "active" : ""}`}><span />{cameraState === "running" ? "LIVE" : cameraState === "starting" ? "STARTING" : "OFF"}</span>
+          {frame && <span className="camera-resolution">{frame.width} × {frame.height}</span>}
+        </div>
+        <p className="camera-privacy"><ShieldCheck size={14} aria-hidden="true" /> Preview frames are not saved or sent to a server.</p>
+      </div>
+      <div className="camera-controls">
+        <div className="camera-controls-heading"><div><h2>Camera source</h2><p>Choose a local camera to see a live preview.</p></div><span className={`camera-state-pill ${cameraState}`}>{cameraLabel(cameraState)}</span></div>
+        <label className="camera-select-label" htmlFor="camera-device">Available cameras</label>
+        <select id="camera-device" value={selectedCamera} disabled={!canUseCamera || cameras.length === 0 || cameraState === "running"} onChange={(event) => setSelectedCamera(event.currentTarget.value)}>
+          {cameras.length === 0 ? <option value="">Search for cameras first</option> : cameras.map((camera) => <option key={camera.id} value={camera.id}>{camera.name}</option>)}
+        </select>
+        <div className="camera-actions">
+          <button type="button" className="secondary-button" onClick={() => void refreshCameras()} disabled={!canUseCamera || loading || cameraState === "running"}><RefreshCw size={14} className={loading ? "spinning" : ""} />{loading ? "Searching…" : "Find cameras"}</button>
+          <button type="button" className="primary-button camera-toggle" onClick={() => void toggleCapture()} disabled={!canUseCamera || (cameraState !== "running" && cameraState !== "starting" && !selectedCamera)}>{cameraState === "running" || cameraState === "starting" ? <><Square size={13} /> Stop preview</> : <><Play size={14} /> Start preview</>}</button>
+        </div>
+        {!canUseCamera && <div className="camera-runtime-note" role="status"><AlertTriangle size={15} /> Open AirControl as a desktop app to access its camera service.</div>}
+        {message && <p className={`camera-message ${message.toLowerCase().includes("denied") || message.toLowerCase().includes("could not") ? "error" : ""}`} role="status">{message}</p>}
+        <div className="camera-permission-note"><strong>Privacy</strong><span>Camera access is requested only when you search for devices. No frames leave this computer.</span></div>
+      </div>
+    </section>
+  );
+}
+
 function SettingsSection({
   connection,
   initialPreferences,
@@ -185,7 +294,7 @@ function SettingsSection({
 
 export default function App() {
   const [activeSection, setActiveSection] = useState("Overview");
-  const { status, preferences, connection, refresh, savePreferences } = useRuntimeStore();
+  const { status, preferences, connection, error, refresh, savePreferences, listCameras, startCamera, stopCamera, setCameraState } = useRuntimeStore();
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -213,7 +322,7 @@ export default function App() {
         <header className="topbar"><div className="breadcrumbs"><span>AirControl</span><ChevronRight size={14} /><strong>{activeSection}</strong></div><div className="topbar-actions"><span className={`runtime-chip ${connection}`}><span />{connection === "connected" ? "Runtime connected" : "Preview mode"}</span><button className="icon-button" type="button" aria-label="Keyboard shortcuts"><Command size={16} /></button><span className="topbar-avatar">D</span></div></header>
         <div className="content-scroll">
           <div className="page-title-row"><div><div className="eyebrow page-eyebrow">{activeSection === "Overview" ? "YOUR WORKSPACE" : "AIRCONTROL"}</div><h1>{activeSection}</h1><p>{sectionDescriptions[activeSection]}</p></div>{activeSection === "Overview" ? <button className="primary-button" type="button" disabled title="Camera and control services are not available yet"><span className="button-status" /> Start control <ArrowUpRight size={15} /></button> : <span className="phase-badge">FOUNDATION PHASE</span>}</div>
-          {activeSection === "Overview" ? <Overview status={status} /> : activeSection === "Settings" ? <SettingsSection connection={connection} initialPreferences={preferences} savePreferences={savePreferences} /> : <PlannedSection title={activeSection} />}
+          {activeSection === "Overview" ? <Overview status={status} /> : activeSection === "Settings" ? <SettingsSection connection={connection} initialPreferences={preferences} savePreferences={savePreferences} /> : activeSection === "Camera & tracking" ? <CameraSection connection={connection} cameraState={status?.camera ?? "unavailable"} error={error} listCameras={listCameras} startCamera={startCamera} stopCamera={stopCamera} setCameraState={setCameraState} /> : <PlannedSection title={activeSection} />}
           <footer className="page-footer"><span>AirControl for Windows <span className="footer-divider">·</span> Foundation build</span><span>Local processing <span className="footer-divider">·</span> No cloud connection</span></footer>
         </div>
       </main>
