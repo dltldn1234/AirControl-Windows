@@ -31,6 +31,18 @@ describe("AirControl desktop shell", () => {
     expect(screen.getByText(/horizontal three-finger swipe/)).toBeInTheDocument();
   });
 
+  it("shows named profiles and never enables system control from browser preview", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.getByText("Control profiles")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Productivity, built-in preset" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Presentation, built-in preset" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Custom, built-in preset" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Save current as profile/ })).toBeDisabled();
+    expect(screen.getByText(/System control remains off/)).toBeInTheDocument();
+  });
+
   it("keeps Air Keyboard off in browser preview and explains its camera prerequisite", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Air Keyboard" }));

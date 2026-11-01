@@ -37,6 +37,17 @@ test("gesture app switching is an explicit desktop-only preference", async ({ pa
   await expect(page.getByText(/horizontal three-finger swipe/)).toBeVisible();
 });
 
+test("control profiles are visible but unavailable without the native runtime", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings" }).click();
+
+  await expect(page.getByText("Control profiles")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Productivity, built-in preset" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Presentation, built-in preset" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Custom, built-in preset" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Save current as profile" })).toBeDisabled();
+});
+
 test("Air Keyboard preview exposes the layout without sending system key events", async ({ page }) => {
   await page.goto("/?surface=keyboard");
 
