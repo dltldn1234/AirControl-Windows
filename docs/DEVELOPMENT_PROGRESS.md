@@ -5,7 +5,7 @@
 - Baseline commit count: 0 (empty repository at project start)
 - Current `main` commit count: 28 after the ordinary merge of PR #8.
 - Current issue: [#10 — Implement safe Windows window and app controls](https://github.com/dltldn1234/AirControl-Windows/issues/10)
-- Current branch: `10-feat/windows-window-controls` (13 commits ahead of `main`; 39 commits reachable from this branch HEAD after the current progress update).
+- Current branch: `10-feat/windows-window-controls` (15 commits ahead of `main`; 41 commits reachable from this branch HEAD after the current progress update).
 - Active stack: Rust, Tauri 2, React, TypeScript, Vite, Tailwind CSS
 
 ## Completed
@@ -94,4 +94,6 @@
 - Added a working Window Control panel with list/selection, activate/minimize/maximize, explicit keyboard-button move/resize actions, and hand-move start/stop. Added a persisted window-movement sensitivity setting with a default for old preference files.
 - Issue #10 local verification after two-hand resize: Rust workspace tests 59 passed, Clippy with warnings denied and formatting passed; frontend typecheck passed, Vitest 5 passed, Vite build passed, Playwright Chromium 3 passed. Windows API compilation and native controls await Windows CI after PR #11 merges; actual window behavior requires a Windows PC.
 - Two-hand resize uses a normalized-distance recognizer with a dead zone, sensitivity clamp, scale clamp, original-rectangle sizing, and immediate reset on tracking loss. The runtime status and Window Control instructions now identify resize mode.
-- Issue #10 work remains stacked on Issue #9 and has not yet been opened as a PR. The two resize commits are `ccc3976` (core recognition) and `ecd0dbb` (native window integration and status UI).
+- Resize scale changes are limited to 0.12 per inference update to prevent abrupt size jumps if landmark positions shift. Core tests cover the cap.
+- Issue #10 work remains stacked on Issue #9 and has not yet been opened as a PR. Resize commits: `ccc3976` (core recognition), `ecd0dbb` (native integration and status UI), and `19724f0` (resize smoothing).
+- PR #11 Windows workflow run `41281169144` has passed every named test/build step, including the Windows executable build, but remains `in_progress` in the GitHub Actions post-job cache cleanup. The run has no final conclusion yet, so PR #11 is still unmerged and Issue #10 Windows CI has not started.
