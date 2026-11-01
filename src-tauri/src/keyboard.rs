@@ -8,13 +8,17 @@ pub struct KeyboardController {
 
 impl KeyboardController {
     pub fn press(&self, key: &str) -> Result<(), String> {
-        let stroke = self
+        let mut session = self
             .session
             .lock()
-            .map_err(|_| "Air Keyboard is temporarily unavailable.".to_owned())?
-            .press(key)?;
-        if let Some(stroke) = stroke {
-            platform::send_keystroke(stroke)?;
+            .map_err(|_| "Air Keyboard is temporarily unavailable.".to_owned())?;
+        let previous = *session;
+        let stroke = session.press(key)?;
+        if let Some(stroke) = stroke
+            && let Err(error) = platform::send_keystroke(stroke)
+        {
+            *session = previous;
+            return Err(error);
         }
         Ok(())
     }
