@@ -40,6 +40,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-log",
  "tempfile",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
