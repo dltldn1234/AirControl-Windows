@@ -7,6 +7,7 @@ pub mod command_palette;
 pub mod cursor;
 pub mod filter;
 pub mod gesture;
+pub mod gesture_studio;
 pub mod hand_tracking;
 pub mod keyboard;
 pub mod scroll;
@@ -48,6 +49,7 @@ pub enum ControlMode {
     Window,
     AirKeyboard,
     CommandPalette,
+    GestureTest,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -77,6 +79,22 @@ pub struct RuntimeSnapshot {
     pub active_profile_id: Option<String>,
     pub palette_hovered_index: Option<usize>,
     pub palette_message: Option<String>,
+    pub gesture_test_action: Option<gesture_studio::GestureAction>,
+    pub gesture_confidence: Option<f32>,
+    pub diagnostics: RuntimeDiagnostics,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeDiagnostics {
+    pub camera_fps: Option<f32>,
+    pub tracking_fps: Option<f32>,
+    pub inference_latency_ms: Option<f32>,
+    pub gesture_latency_ms: Option<f32>,
+    pub tracking_loss_count: u64,
+    pub input_event_count: u64,
+    pub process_cpu_percent: Option<f32>,
+    pub process_memory_bytes: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -109,6 +127,7 @@ pub struct UserPreferences {
     pub profiles: Vec<ControlProfile>,
     pub auto_profile_enabled: bool,
     pub app_profile_rules: Vec<app_profile::AppProfileRule>,
+    pub gesture_studio: gesture_studio::GestureStudioSettings,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -122,6 +141,7 @@ pub struct ControlProfile {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(default)]
 pub struct ProfileSettings {
     pub cursor_sensitivity: f32,
     pub cursor_smoothing: f32,
@@ -132,6 +152,7 @@ pub struct ProfileSettings {
     pub right_click_enabled: bool,
     pub camera_mirrored: bool,
     pub app_switch_enabled: bool,
+    pub gesture_studio: gesture_studio::GestureStudioSettings,
 }
 
 impl ProfileSettings {
@@ -141,6 +162,7 @@ impl ProfileSettings {
         self.pinch_sensitivity = finite_clamp(self.pinch_sensitivity, 0.6, 1.4, 1.0);
         self.window_sensitivity = finite_clamp(self.window_sensitivity, 0.4, 2.0, 1.0);
         self.scroll_sensitivity = finite_clamp(self.scroll_sensitivity, 0.4, 3.0, 1.0);
+        self.gesture_studio = self.gesture_studio.normalized();
         self
     }
 }
@@ -188,6 +210,7 @@ impl Default for ProfileSettings {
             right_click_enabled: true,
             camera_mirrored: true,
             app_switch_enabled: false,
+            gesture_studio: gesture_studio::GestureStudioSettings::default(),
         }
     }
 }
@@ -209,6 +232,7 @@ impl Default for UserPreferences {
             profiles: ControlProfile::built_ins(),
             auto_profile_enabled: false,
             app_profile_rules: Vec::new(),
+            gesture_studio: gesture_studio::GestureStudioSettings::default(),
         }
     }
 }
@@ -220,6 +244,7 @@ impl UserPreferences {
         self.pinch_sensitivity = finite_clamp(self.pinch_sensitivity, 0.6, 1.4, 1.0);
         self.window_sensitivity = finite_clamp(self.window_sensitivity, 0.4, 2.0, 1.0);
         self.scroll_sensitivity = finite_clamp(self.scroll_sensitivity, 0.4, 3.0, 1.0);
+        self.gesture_studio = self.gesture_studio.normalized();
         self.cursor_calibration = self.cursor_calibration.normalized();
         if self.profiles.is_empty() {
             self.profiles = ControlProfile::built_ins();
@@ -244,6 +269,7 @@ impl UserPreferences {
             right_click_enabled: self.right_click_enabled,
             camera_mirrored: self.camera_mirrored,
             app_switch_enabled: self.app_switch_enabled,
+            gesture_studio: self.gesture_studio.clone(),
         };
         if let Some(active) = self
             .profiles
@@ -272,10 +298,12 @@ impl UserPreferences {
         self.right_click_enabled = settings.right_click_enabled;
         self.camera_mirrored = settings.camera_mirrored;
         self.app_switch_enabled = settings.app_switch_enabled;
+        self.gesture_studio = settings.gesture_studio.clone();
         Ok(self)
     }
 
     pub fn validate_profiles(&self) -> Result<(), String> {
+        self.gesture_studio.validate()?;
         let mut ids = std::collections::HashSet::new();
         let mut names = std::collections::HashSet::new();
         for profile in &self.profiles {
@@ -298,6 +326,7 @@ impl UserPreferences {
             {
                 return Err("Unknown profiles cannot be marked as built-in.".to_owned());
             }
+            profile.settings.gesture_studio.validate()?;
         }
         for builtin in ControlProfile::built_ins() {
             if !self.profiles.iter().any(|profile| {

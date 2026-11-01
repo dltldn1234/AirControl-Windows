@@ -45,11 +45,38 @@ pub fn choose_pinch_source_with_enabled(
     sensitivity: f32,
     right_click_enabled: bool,
 ) -> Option<PinchSource> {
-    choose_pinch_source(
+    choose_pinch_source_with_sensitivities(
         left_distance,
+        sensitivity,
         right_click_enabled.then_some(right_distance).flatten(),
         sensitivity,
     )
+}
+
+pub fn choose_pinch_source_with_sensitivities(
+    left_distance: Option<f32>,
+    left_sensitivity: f32,
+    right_distance: Option<f32>,
+    right_sensitivity: f32,
+) -> Option<PinchSource> {
+    let threshold = |sensitivity: f32| {
+        0.28 * if sensitivity.is_finite() {
+            sensitivity.clamp(0.6, 1.4)
+        } else {
+            1.0
+        }
+    };
+    let left = left_distance
+        .filter(|distance| distance.is_finite() && *distance <= threshold(left_sensitivity));
+    let right = right_distance
+        .filter(|distance| distance.is_finite() && *distance <= threshold(right_sensitivity));
+    match (left, right) {
+        (Some(left), Some(right)) if left <= right => Some(PinchSource::LeftClick),
+        (Some(_), Some(_)) => Some(PinchSource::RightClick),
+        (Some(_), None) => Some(PinchSource::LeftClick),
+        (None, Some(_)) => Some(PinchSource::RightClick),
+        (None, None) => None,
+    }
 }
 
 pub fn two_finger_scroll_position(landmarks: &[[f32; 2]; 21], frame_height: u32) -> Option<f32> {
@@ -102,6 +129,17 @@ impl RightClickRecognizer {
     }
 
     pub fn update(&mut self, distance: Option<f32>, sensitivity: f32, now: Instant) -> bool {
+        self.update_with_cooldown(distance, sensitivity, Duration::from_millis(450), now)
+    }
+
+    pub fn update_with_cooldown(
+        &mut self,
+        distance: Option<f32>,
+        sensitivity: f32,
+        cooldown: Duration,
+        now: Instant,
+    ) -> bool {
+        self.cooldown = cooldown;
         let Some(distance) = distance.filter(|distance| distance.is_finite()) else {
             self.state = TapState::Idle;
             self.last_click_at = Some(now);
@@ -197,12 +235,35 @@ impl PinchRecognizer {
         !matches!(self.state, PinchState::Idle)
     }
 
+    pub fn is_dragging(self) -> bool {
+        matches!(self.state, PinchState::Dragging)
+    }
+
     pub fn update(
         &mut self,
         normalized_distance: Option<f32>,
         sensitivity: f32,
         now: Instant,
     ) -> PinchAction {
+        self.update_with_timing(
+            normalized_distance,
+            sensitivity,
+            Duration::from_millis(450),
+            Duration::from_millis(350),
+            now,
+        )
+    }
+
+    pub fn update_with_timing(
+        &mut self,
+        normalized_distance: Option<f32>,
+        sensitivity: f32,
+        drag_hold: Duration,
+        cooldown: Duration,
+        now: Instant,
+    ) -> PinchAction {
+        self.drag_hold = drag_hold.clamp(Duration::from_millis(150), Duration::from_millis(2_000));
+        self.cooldown = cooldown.clamp(Duration::from_millis(100), Duration::from_millis(2_000));
         let Some(distance) = normalized_distance.filter(|distance| distance.is_finite()) else {
             return self.lose_tracking(now);
         };
