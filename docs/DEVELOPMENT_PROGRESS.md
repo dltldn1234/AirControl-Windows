@@ -70,5 +70,15 @@
 
 ## Next
 
-1. Commit the live inference change, update Issue #5's draft PR, and verify its Windows runner result.
-2. Validate actual palm and landmark locations using a Windows webcam; tune crop transform or confidence thresholds if needed.
+1. Merge PR #8 after the Windows browser tests and Windows desktop executable build both pass.
+2. Rebase/retain Issue #9 on the merged cursor-control history, then open its draft PR and wait for Windows CI.
+3. Validate camera, cursor, click, and scroll behavior on a Windows PC; this macOS host cannot provide that evidence.
+
+## Follow-up (2026-11-01, Issue #9)
+
+- Issue: [#9 — Add safe scroll and right-click gestures](https://github.com/dltldn1234/AirControl-Windows/issues/9). Work is isolated in `9-feat/scroll-right-click`, based on the Issue #7 branch so the cursor-control dependency is explicit.
+- PR #8 for Issue #7 remains open and draft while its Windows runner completes. Rust tests and Clippy, frontend typecheck/unit/build/browser tests, and the Windows executable build are part of that runner; no merge is performed before all checks pass.
+- Implemented in the Issue #9 worktree: normalized two-finger scroll recognition, reversed direction and sensitivity, per-frame wheel bounds and motion dead zone; thumb-middle short-tap right click, hysteresis, cooldown, and conflict resolution with left click; scroll suppresses cursor movement; tracking loss, stop, and teardown reset recognition and release both buttons.
+- Added a persisted right-click enable preference. Deserialization defaults the new field for existing preference JSON files.
+- Issue #9 local verification: Rust workspace tests 48 passed, Clippy with warnings denied passed, formatting passed, frontend typecheck passed, Vitest 5 passed, Vite production build passed, Playwright Chromium 2 passed. Windows `SendInput` and physical camera behavior still require Windows CI and a Windows PC.
+- Three Issue #9 commits are recorded locally (`069fa4a`, `54302fc`, `b3bbadb`); they have not been pushed or opened as a PR. The branch awaits Issue #7 merge so the new PR can target `main` without including cursor-control commits twice.
