@@ -302,4 +302,25 @@ mod tests {
             None
         );
     }
+
+    #[test]
+    fn calibrated_edges_compose_with_mirroring_and_virtual_desktop_mapping() {
+        let calibration = CursorCalibration {
+            left: 0.2,
+            top: 0.1,
+            right: 0.8,
+            bottom: 0.9,
+        };
+        let camera_left = apply_cursor_calibration([0.2, 0.1], calibration).unwrap();
+        let camera_right = apply_cursor_calibration([0.8, 0.9], calibration).unwrap();
+
+        assert_eq!(
+            map_normalized_cursor(camera_left, DESKTOP, true),
+            Some(ScreenPoint { x: 2559, y: -120 })
+        );
+        assert_eq!(
+            map_normalized_cursor(camera_right, DESKTOP, true),
+            Some(ScreenPoint { x: -1920, y: 1439 })
+        );
+    }
 }
