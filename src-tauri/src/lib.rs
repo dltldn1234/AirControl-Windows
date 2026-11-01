@@ -8,6 +8,7 @@ mod camera;
 mod cursor;
 mod hand_tracking;
 mod settings;
+mod window_manager;
 
 #[derive(Clone, Default)]
 pub struct RuntimeState {
@@ -76,6 +77,7 @@ fn start_camera(
     runtime: State<'_, RuntimeState>,
     camera_service: State<'_, CameraService>,
     cursor: State<'_, cursor::CursorController>,
+    window_control: State<'_, window_manager::WindowGestureController>,
     device_id: String,
 ) -> Result<(), String> {
     let preferences = settings::load(&app)?;
@@ -84,6 +86,7 @@ fn start_camera(
         runtime.snapshot.clone(),
         device_id,
         cursor.inner().clone(),
+        window_control.inner().clone(),
         preferences.pinch_sensitivity,
     )
 }
@@ -94,9 +97,11 @@ fn stop_camera(
     runtime: State<'_, RuntimeState>,
     camera_service: State<'_, CameraService>,
     cursor: State<'_, cursor::CursorController>,
+    window_control: State<'_, window_manager::WindowGestureController>,
 ) -> Result<(), String> {
     let result = camera_service.stop(&runtime.snapshot, &app);
     cursor.disable()?;
+    window_control.disable()?;
     set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled);
     result
 }
@@ -107,6 +112,7 @@ fn set_cursor_control(
     app: AppHandle,
     runtime: State<'_, RuntimeState>,
     cursor: State<'_, cursor::CursorController>,
+    window_control: State<'_, window_manager::WindowGestureController>,
 ) -> Result<(), String> {
     if enabled {
         let snapshot = runtime
@@ -125,7 +131,11 @@ fn set_cursor_control(
                     .to_owned(),
             );
         }
+        if snapshot.control_mode != aircontrol_core::ControlMode::Disabled {
+            return Err("Stop the active control mode before enabling cursor control.".to_owned());
+        }
         let preferences = settings::load(&app)?;
+        window_control.disable()?;
         cursor.enable(
             preferences.camera_mirrored,
             preferences.cursor_sensitivity,
@@ -137,19 +147,129 @@ fn set_cursor_control(
         set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Cursor);
     } else {
         cursor.disable()?;
+        window_control.disable()?;
         set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled);
     }
     Ok(())
 }
 
+#[tauri::command]
+fn set_window_control(
+    enabled: bool,
+    handle: Option<String>,
+    app: AppHandle,
+    runtime: State<'_, RuntimeState>,
+    cursor: State<'_, cursor::CursorController>,
+    window_control: State<'_, window_manager::WindowGestureController>,
+) -> Result<(), String> {
+    if enabled {
+        let snapshot = runtime
+            .snapshot
+            .lock()
+            .map_err(|_| "Runtime status is temporarily unavailable.".to_owned())?
+            .clone();
+        let readiness = aircontrol_core::ControlReadiness {
+            camera_running: snapshot.camera == aircontrol_core::CameraState::Running,
+            hand_pose_detected: snapshot.hand_tracking
+                == aircontrol_core::HandTrackingState::Detected,
+        };
+        if !readiness.can_enable() {
+            return Err(
+                "Start the camera and wait for all hand landmarks before enabling window control."
+                    .to_owned(),
+            );
+        }
+        if snapshot.control_mode != aircontrol_core::ControlMode::Disabled {
+            return Err("Stop the active control mode before enabling window control.".to_owned());
+        }
+        let selected = handle.as_deref().ok_or_else(|| {
+            "Choose an application window before enabling hand movement.".to_owned()
+        })?;
+        let preferences = settings::load(&app)?;
+        cursor.disable()?;
+        window_control.enable(
+            selected,
+            preferences.window_sensitivity,
+            preferences.camera_mirrored,
+        )?;
+        set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Window);
+    } else {
+        window_control.disable()?;
+        let current_mode = runtime
+            .snapshot
+            .lock()
+            .map_err(|_| "Runtime status is temporarily unavailable.".to_owned())?
+            .control_mode;
+        if current_mode == aircontrol_core::ControlMode::Window {
+            set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled);
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn list_control_windows() -> Result<Vec<window_manager::WindowInfo>, String> {
+    window_manager::list_windows()
+}
+
+#[tauri::command]
+fn get_foreground_control_window() -> Result<Option<window_manager::WindowInfo>, String> {
+    window_manager::foreground_window()
+}
+
+#[tauri::command]
+fn focus_control_window(handle: String) -> Result<(), String> {
+    window_manager::focus_window(&handle)
+}
+
+#[tauri::command]
+fn move_control_window(
+    handle: String,
+    delta: [f32; 2],
+) -> Result<aircontrol_core::window::WindowRect, String> {
+    window_manager::move_window_by(&handle, delta)
+}
+
+#[tauri::command]
+fn resize_control_window(
+    handle: String,
+    scale: f32,
+) -> Result<aircontrol_core::window::WindowRect, String> {
+    window_manager::resize_window_by(&handle, scale)
+}
+
+#[tauri::command]
+fn minimize_control_window(handle: String) -> Result<(), String> {
+    window_manager::minimize_window(&handle)
+}
+
+#[tauri::command]
+fn maximize_control_window(handle: String) -> Result<(), String> {
+    window_manager::maximize_window(&handle)
+}
+
 fn set_control_mode(runtime: &RuntimeState, app: &AppHandle, mode: aircontrol_core::ControlMode) {
     if let Ok(mut snapshot) = runtime.snapshot.lock() {
         snapshot.control_mode = mode;
-        snapshot.active_gesture = if mode == aircontrol_core::ControlMode::Disabled {
-            aircontrol_core::ActiveGesture::None
-        } else {
-            aircontrol_core::ActiveGesture::Cursor
+        snapshot.active_gesture = match mode {
+            aircontrol_core::ControlMode::Cursor => aircontrol_core::ActiveGesture::Cursor,
+            aircontrol_core::ControlMode::Disabled
+            | aircontrol_core::ControlMode::Window
+            | aircontrol_core::ControlMode::AirKeyboard => aircontrol_core::ActiveGesture::None,
         };
+        let _ = app.emit("runtime-status", snapshot.clone());
+    }
+}
+
+fn set_window_gesture(
+    runtime: &std::sync::Arc<std::sync::Mutex<RuntimeSnapshot>>,
+    app: &AppHandle,
+    gesture: aircontrol_core::ActiveGesture,
+) {
+    if let Ok(mut snapshot) = runtime.lock()
+        && snapshot.control_mode == aircontrol_core::ControlMode::Window
+    {
+        snapshot.active_gesture = gesture;
         let _ = app.emit("runtime-status", snapshot.clone());
     }
 }
@@ -182,6 +302,7 @@ pub fn run() {
         .manage(RuntimeState::default())
         .manage(CameraService::default())
         .manage(cursor::CursorController::default())
+        .manage(window_manager::WindowGestureController::default())
         .setup(|_app| {
             log::info!("AirControl started with system controls disabled");
             Ok(())
@@ -193,7 +314,15 @@ pub fn run() {
             list_cameras,
             start_camera,
             stop_camera,
-            set_cursor_control
+            set_cursor_control,
+            set_window_control,
+            list_control_windows,
+            get_foreground_control_window,
+            focus_control_window,
+            move_control_window,
+            resize_control_window,
+            minimize_control_window,
+            maximize_control_window
         ])
         .run(tauri::generate_context!())
         .expect("failed to launch AirControl");

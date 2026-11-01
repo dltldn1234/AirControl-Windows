@@ -3,9 +3,9 @@
 ## Repository baseline
 
 - Baseline commit count: 0 (empty repository at project start)
-- Current `main` commit count: 28 after the ordinary merge of PR #8.
-- Current issue: [#9 — Add safe scroll and right-click gestures](https://github.com/dltldn1234/AirControl-Windows/issues/9)
-- Current branch: `9-feat/scroll-right-click` (4 commits ahead of `main`; 30 commits reachable from this branch HEAD).
+- Current `main` commit count: 34 after the ordinary merge of PR #11.
+- Current issue: [#10 — Implement safe Windows window and app controls](https://github.com/dltldn1234/AirControl-Windows/issues/10)
+- Current branch: `10-feat/windows-window-controls` (14 commits ahead of `main`; 48 commits reachable from this branch HEAD after the current progress update).
 - Active stack: Rust, Tauri 2, React, TypeScript, Vite, Tailwind CSS
 
 ## Completed
@@ -60,20 +60,22 @@
 ## In progress
 
 - Phase 5 cursor movement and pinch click/drag dispatch: merged through PR #8 after Windows CI passed; actual cursor behavior still needs a Windows PC check.
-- Phase 6 scroll and right-click gestures: implemented and pushed in Issue #9; PR/Windows CI pending.
+- Phase 6 scroll and right-click gestures: implemented and merged through PR #11 after all Windows CI checks passed.
+- Phase 7 window control: implemented in Issue #10 branch with local checks passing; Windows CI is pending on its PR, and real window behavior needs a Windows PC.
 - Phase 4 ONNX hand tracking: merged through PR #6 after successful Windows CI; actual webcam landmark quality still needs a Windows PC check.
 
 ## Not implemented
 
-- Window/app control and Air Keyboard remain unimplemented. Window/app control planning is tracked in Issue #10.
+- Gesture-driven app switching is not implemented; the Window panel can activate a user-selected eligible window.
+- Air Keyboard, calibration, gesture customization, tray integration, and Windows packaging remain unimplemented.
 - Calibration, gesture customization, tray integration, and Windows packaging.
 - Windows PC hardware validation.
 
 ## Next
 
-1. Finish and merge Issue #9 after its Windows CI passes.
-2. Continue Issue #10 window and app control after the scroll/right-click PR.
-3. Validate camera, cursor, click, and scroll behavior on a Windows PC; this macOS host cannot provide that evidence.
+1. Open a draft PR for Issue #10 and validate its Windows-only APIs in CI.
+2. Implement gesture-driven app switching and begin the next scoped feature issue.
+3. Validate camera, cursor, click, scroll, resize, and window behavior on a Windows PC; this macOS host cannot provide that evidence.
 
 ## Follow-up (2026-11-01, Issue #9)
 
@@ -81,5 +83,20 @@
 - PR #8 for Issue #7 was merged normally at `66a144b110ffaeb9c6f0880940ccd563aa867575` after all Windows CI checks passed, including Windows executable compilation.
 - Implemented in the Issue #9 worktree: normalized two-finger scroll recognition, reversed direction and sensitivity, per-frame wheel bounds and motion dead zone; thumb-middle short-tap right click, hysteresis, cooldown, and conflict resolution with left click; scroll suppresses cursor movement; tracking loss, stop, and teardown reset recognition and release both buttons.
 - Added a persisted right-click enable preference. Deserialization defaults the new field for existing preference JSON files.
-- Issue #9 local verification: Rust workspace tests 48 passed, Clippy with warnings denied passed, formatting passed, frontend typecheck passed, Vitest 5 passed, Vite production build passed, Playwright Chromium 2 passed. Windows `SendInput` and physical camera behavior still require Issue #9 Windows CI and a Windows PC.
-- Four Issue #9 commits are pushed (`069fa4a`, `54302fc`, `b3bbadb`, `716e2bb`), 4 commits ahead of `main`; a draft PR is next after documentation status updates.
+- Issue #9 local verification: Rust workspace tests 48 passed, Clippy with warnings denied passed, formatting passed, frontend typecheck passed, Vitest 5 passed, Vite production build passed, Playwright Chromium 2 passed. Windows CI passed on PR #11, including Windows desktop compilation; physical camera and input behavior remain a Windows PC check.
+- PR #11 for Issue #9 was merged with ordinary merge commit `969b0879cd4b2646183d209b1aeca74720c2000b` after the Windows CI run `41281169144` completed successfully.
+
+## Follow-up (2026-11-01, Issue #10)
+
+- Issue: [#10 — Implement safe Windows window and app controls](https://github.com/dltldn1234/AirControl-Windows/issues/10). Work is isolated in `10-feat/windows-window-controls`, stacked on the Issue #9 branch until PR #11 merges.
+- Added pure tested window movement/resize geometry, size constraints, supported-window eligibility, and a pinch-to-move state machine with hysteresis and tracking-loss reset.
+- Added Windows-only visible top-level window enumeration, filtering for hidden/owned/cloaked/tool/self windows, hex-string HWND transport to avoid JavaScript integer precision loss, and validated activation/move/resize/minimize/maximize commands. Protected/unsupported windows fail closed; foreground restrictions are reported without bypass.
+- Added explicit camera-and-pose-gated Window mode. The user chooses a window and activates hand control; an index pinch moves only that target, while the distance between two tracked index fingertips scales it around its original center. Losing either hand ends resize immediately. Cursor control and window control cannot be enabled at the same time. Stop, tracking loss, inference errors, and camera shutdown end the mode.
+- Added a working Window Control panel with list/selection, activate/minimize/maximize, explicit keyboard-button move/resize actions, and hand-move start/stop. Added a persisted window-movement sensitivity setting with a default for old preference files.
+- Issue #10 local verification after two-hand resize: Rust workspace tests 59 passed, Clippy with warnings denied and formatting passed; frontend typecheck passed, Vitest 5 passed, Vite build passed, Playwright Chromium 3 passed. Windows API compilation awaits the Issue #10 PR checks; actual window behavior requires a Windows PC.
+- Two-hand resize uses a normalized-distance recognizer with a dead zone, sensitivity clamp, scale clamp, original-rectangle sizing, and immediate reset on tracking loss. The runtime status and Window Control instructions now identify resize mode.
+- Resize scale changes are limited to 0.12 per inference update to prevent abrupt size jumps if landmark positions shift. Core tests cover the cap.
+- Issue #10 PR #12 is open as a draft against `main`, after a normal merge of the newly updated base; its diff contains only window-control changes.
+- While Window mode is active, the UI now locks target selection, refresh, and direct window actions, keeping the displayed target consistent with the native controller target.
+- PR #12 Windows CI is running for the latest pushed revision; its result must pass before merge.
+- Resize commits: `ccc3976` (core recognition), `ecd0dbb` (native integration and status UI), and `19724f0` (resize smoothing).

@@ -26,6 +26,7 @@ const initialPreferences: UserPreferences = {
   cursorSensitivity: 1,
   cursorSmoothing: 0.4,
   pinchSensitivity: 1,
+  windowSensitivity: 1,
   scrollSensitivity: 1,
   reverseScrollDirection: false,
   rightClickEnabled: true,

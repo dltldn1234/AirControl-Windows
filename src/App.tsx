@@ -22,12 +22,13 @@ import {
   WandSparkles,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useRuntimeStore } from "./state/runtimeStore";
 import type { RuntimeSnapshot } from "./domain/runtimeStatus";
 import type { CameraDevice, CameraFrame, CameraStatusEvent, HandTrackingStatusEvent } from "./domain/camera";
 import type { UserPreferences } from "./domain/userPreferences";
+import type { WindowInfo } from "./domain/window";
 import { cameraLabel, canEnableCursorControl, gestureLabel, trackingLabel } from "./domain/runtimeStatus";
 
 const HAND_CONNECTIONS: [number, number][] = [
@@ -87,13 +88,13 @@ function StatusCard({
   );
 }
 
-function RuntimeUnavailable() {
+function RuntimeUnavailable({ detail = "Live camera and system status will appear here when AirControl runs as a Tauri desktop app." }: { detail?: string }) {
   return (
     <div className="runtime-notice" role="status">
       <span className="notice-icon"><CircleHelp size={17} aria-hidden="true" /></span>
       <div>
         <strong>Desktop runtime is not connected</strong>
-        <p>Live camera and system status will appear here when AirControl runs as a Tauri desktop app.</p>
+        <p>{detail}</p>
       </div>
     </div>
   );
@@ -328,11 +329,77 @@ function SettingsSection({
       <label className="setting-control"><span><strong>Cursor sensitivity</strong><small>Adjust movement gain after calibration.</small></span><span className="range-control"><input aria-label="Cursor sensitivity" type="range" min="0.5" max="2" step="0.1" value={preferences.cursorSensitivity} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, cursorSensitivity: Number(event.currentTarget.value) })} /><output>{preferences.cursorSensitivity.toFixed(1)}×</output></span></label>
       <label className="setting-control"><span><strong>Cursor smoothing</strong><small>Balance steady motion and responsiveness.</small></span><span className="range-control"><input aria-label="Cursor smoothing" type="range" min="0" max="0.9" step="0.05" value={preferences.cursorSmoothing} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, cursorSmoothing: Number(event.currentTarget.value) })} /><output>{preferences.cursorSmoothing.toFixed(2)}</output></span></label>
       <label className="setting-control"><span><strong>Pinch sensitivity</strong><small>Set the normalized pinch threshold.</small></span><span className="range-control"><input aria-label="Pinch sensitivity" type="range" min="0.6" max="1.4" step="0.05" value={preferences.pinchSensitivity} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, pinchSensitivity: Number(event.currentTarget.value) })} /><output>{preferences.pinchSensitivity.toFixed(2)}</output></span></label>
+      <label className="setting-control"><span><strong>Window move sensitivity</strong><small>Set the travel distance while moving a window with a pinch.</small></span><span className="range-control"><input aria-label="Window move sensitivity" type="range" min="0.4" max="2" step="0.1" value={preferences.windowSensitivity} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, windowSensitivity: Number(event.currentTarget.value) })} /><output>{preferences.windowSensitivity.toFixed(1)}×</output></span></label>
       <label className="setting-control"><span><strong>Scroll sensitivity</strong><small>Adjust scroll distance per hand movement.</small></span><span className="range-control"><input aria-label="Scroll sensitivity" type="range" min="0.4" max="3" step="0.1" value={preferences.scrollSensitivity} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, scrollSensitivity: Number(event.currentTarget.value) })} /><output>{preferences.scrollSensitivity.toFixed(1)}×</output></span></label>
       <label className="setting-control toggle-setting"><span><strong>Mirror camera coordinates</strong><small>Match cursor direction to a mirrored self-view.</small></span><input aria-label="Mirror camera coordinates" type="checkbox" checked={preferences.cameraMirrored} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, cameraMirrored: event.currentTarget.checked })} /></label>
       <label className="setting-control toggle-setting"><span><strong>Reverse scroll direction</strong><small>Invert vertical hand movement mapping.</small></span><input aria-label="Reverse scroll direction" type="checkbox" checked={preferences.reverseScrollDirection} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, reverseScrollDirection: event.currentTarget.checked })} /></label>
       <label className="setting-control toggle-setting"><span><strong>Enable right click</strong><small>Use a short thumb and middle finger pinch to right-click.</small></span><input aria-label="Enable right click" type="checkbox" checked={preferences.rightClickEnabled} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, rightClickEnabled: event.currentTarget.checked })} /></label>
       <div className="settings-footer"><span role="status">{saveState}</span><button type="button" className="primary-button save-button" disabled={!canSave} onClick={() => void save()}>Save preferences <Check size={14} /></button></div>
+    </section>
+  );
+}
+
+function WindowControlSection({ connection, status }: { connection: "preview" | "connected" | "error"; status: RuntimeSnapshot | null }) {
+  const [windows, setWindows] = useState<WindowInfo[]>([]);
+  const [selectedHandle, setSelectedHandle] = useState<string | null>(null);
+  const [message, setMessage] = useState("Choose an application window to control.");
+  const canUseWindows = connection === "connected";
+  const selectedWindow = windows.find((window) => window.handle === selectedHandle);
+  const windowModeActive = status?.controlMode === "window";
+  const canStartWindowMode = canUseWindows && status?.camera === "running" && status?.handTracking === "detected" && status.controlMode === "disabled" && selectedHandle !== null;
+
+  async function refreshWindows() {
+    if (!canUseWindows) return;
+    try {
+      const result = await invoke<WindowInfo[]>("list_control_windows");
+      setWindows(result);
+      setSelectedHandle((current) => result.some((window) => window.handle === current) ? current : result[0]?.handle ?? null);
+      setMessage(result.length === 0 ? "No eligible application windows were found." : `${result.length} eligible windows found.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function runWindowAction(command: string, args: Record<string, unknown> = {}) {
+    if (!canUseWindows || selectedHandle === null || windowModeActive) return;
+    try {
+      await invoke(command, { handle: selectedHandle, ...args });
+      await refreshWindows();
+      setMessage("Window command completed.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function setWindowMoveMode(enabled: boolean) {
+    if (!canUseWindows || (enabled && !canStartWindowMode)) return;
+    try {
+      await invoke("set_window_control", { enabled, handle: enabled ? selectedHandle : null });
+      setMessage(enabled ? "Window hand control is on. Pinch with your index finger and move." : "Window hand control is off.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  useEffect(() => { void refreshWindows(); }, [canUseWindows]);
+
+  return (
+    <section className="window-control-panel">
+      <div className="settings-intro"><span className="planned-icon"><AppWindow size={20} aria-hidden="true" /></span><div><h2>Application windows</h2><p>Only visible, titled, non-tool windows from other processes are listed. Windows may decline activation or movement for protected windows.</p></div></div>
+      {!canUseWindows && <RuntimeUnavailable detail="Window enumeration and controls are available in the Windows desktop app." />}
+      <div className="window-control-toolbar"><button type="button" className="secondary-button" disabled={!canUseWindows || windowModeActive} onClick={() => void refreshWindows()}><RefreshCw size={14} />Refresh windows</button><button type="button" className={windowModeActive ? "secondary-button" : "primary-button save-button"} disabled={windowModeActive ? !canUseWindows : !canStartWindowMode} onClick={() => void setWindowMoveMode(!windowModeActive)}>{windowModeActive ? "Stop hand move" : "Start hand move"}</button><span role="status">{message}</span></div>
+      {windowModeActive && <p className="window-mode-status" role="status">Hand control is active for <strong>{selectedWindow?.title ?? "the selected window"}</strong>. Pinch with one hand to move; spread or bring two tracked hands together to resize. If either hand is lost, resizing stops immediately.</p>}
+      {windows.length === 0 ? <div className="window-empty-state"><AppWindow size={22} aria-hidden="true" /><strong>No eligible windows</strong><span>Open a regular desktop app, then refresh the list.</span></div> : <div className="window-control-layout">
+        <div className="window-list" role="listbox" aria-label="Available application windows">
+          {windows.map((window) => <button type="button" role="option" aria-selected={selectedHandle === window.handle} className={`window-list-item ${selectedHandle === window.handle ? "selected" : ""}`} key={window.handle} disabled={windowModeActive} onClick={() => setSelectedHandle(window.handle)}><strong>{window.title}</strong><small>{window.rect.width} × {window.rect.height} · PID {window.processId}</small></button>)}
+        </div>
+        {selectedWindow && <div className="window-actions">
+          <div><span className="eyebrow">SELECTED WINDOW</span><h3>{selectedWindow.title}</h3><p>{selectedWindow.rect.x}, {selectedWindow.rect.y} · {selectedWindow.rect.width} × {selectedWindow.rect.height}</p></div>
+          <div className="window-action-row"><button type="button" className="secondary-button" disabled={windowModeActive} onClick={() => void runWindowAction("focus_control_window")}>Activate</button><button type="button" className="secondary-button" disabled={windowModeActive} onClick={() => void runWindowAction("minimize_control_window")}>Minimize</button><button type="button" className="secondary-button" disabled={windowModeActive} onClick={() => void runWindowAction("maximize_control_window")}>Maximize</button></div>
+          <div className="window-action-row"><button type="button" className="secondary-button" aria-label="Move window left" disabled={windowModeActive} onClick={() => void runWindowAction("move_control_window", { delta: [-40, 0] })}>← 40 px</button><button type="button" className="secondary-button" aria-label="Move window up" disabled={windowModeActive} onClick={() => void runWindowAction("move_control_window", { delta: [0, -40] })}>↑ 40 px</button><button type="button" className="secondary-button" aria-label="Move window down" disabled={windowModeActive} onClick={() => void runWindowAction("move_control_window", { delta: [0, 40] })}>↓ 40 px</button><button type="button" className="secondary-button" aria-label="Move window right" disabled={windowModeActive} onClick={() => void runWindowAction("move_control_window", { delta: [40, 0] })}>40 px →</button></div>
+          <div className="window-action-row"><button type="button" className="secondary-button" disabled={windowModeActive} onClick={() => void runWindowAction("resize_control_window", { scale: 0.9 })}>Shrink 10%</button><button type="button" className="secondary-button" disabled={windowModeActive} onClick={() => void runWindowAction("resize_control_window", { scale: 1.1 })}>Enlarge 10%</button></div>
+        </div>}
+      </div>}
     </section>
   );
 }
@@ -380,7 +447,7 @@ export default function App() {
         <header className="topbar"><div className="breadcrumbs"><span>AirControl</span><ChevronRight size={14} /><strong>{activeSection}</strong></div><div className="topbar-actions"><span className={`runtime-chip ${connection}`}><span />{connection === "connected" ? "Runtime connected" : "Preview mode"}</span><button className="icon-button" type="button" aria-label="Keyboard shortcuts"><Command size={16} /></button><span className="topbar-avatar">D</span></div></header>
         <div className="content-scroll">
           <div className="page-title-row"><div><div className="eyebrow page-eyebrow">{activeSection === "Overview" ? "YOUR WORKSPACE" : "AIRCONTROL"}</div><h1>{activeSection}</h1><p>{sectionDescriptions[activeSection]}</p></div><span className="phase-badge">{activeSection === "Overview" ? "LOCAL FIRST" : "IN DEVELOPMENT"}</span></div>
-          {activeSection === "Overview" ? <Overview status={status} connection={connection} error={error} setCursorControl={setCursorControl} /> : activeSection === "Settings" ? <SettingsSection connection={connection} initialPreferences={preferences} savePreferences={savePreferences} /> : activeSection === "Camera & tracking" ? <CameraSection connection={connection} cameraState={status?.camera ?? "unavailable"} handTrackingState={status?.handTracking ?? "waiting"} error={error} listCameras={listCameras} startCamera={startCamera} stopCamera={stopCamera} setCameraState={setCameraState} setHandTrackingState={setHandTrackingState} /> : <PlannedSection title={activeSection} />}
+          {activeSection === "Overview" ? <Overview status={status} connection={connection} error={error} setCursorControl={setCursorControl} /> : activeSection === "Settings" ? <SettingsSection connection={connection} initialPreferences={preferences} savePreferences={savePreferences} /> : activeSection === "Camera & tracking" ? <CameraSection connection={connection} cameraState={status?.camera ?? "unavailable"} handTrackingState={status?.handTracking ?? "waiting"} error={error} listCameras={listCameras} startCamera={startCamera} stopCamera={stopCamera} setCameraState={setCameraState} setHandTrackingState={setHandTrackingState} /> : activeSection === "Window control" ? <WindowControlSection connection={connection} status={status} /> : <PlannedSection title={activeSection} />}
           <footer className="page-footer"><span>AirControl for Windows <span className="footer-divider">·</span> Foundation build</span><span>Local processing <span className="footer-divider">·</span> No cloud connection</span></footer>
         </div>
       </main>
