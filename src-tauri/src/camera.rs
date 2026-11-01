@@ -3,6 +3,7 @@ use crate::hand_tracking::HandTrackingModels;
 use crate::keyboard::KeyboardController;
 use crate::window_manager::WindowGestureController;
 use aircontrol_core::gesture::{PinchAction, next_cursor_gesture};
+use aircontrol_core::hand_tracking::HandTrackAssociator;
 use aircontrol_core::{CameraState, RuntimeSnapshot};
 use base64::Engine;
 use image::codecs::jpeg::JpegEncoder;
@@ -248,6 +249,7 @@ fn capture_loop(
 
     set_camera_state(&runtime, &app, CameraState::Running, None);
     let mut last_preview = Instant::now();
+    let mut hand_tracks = HandTrackAssociator::default();
 
     while !stop.load(Ordering::Acquire) {
         let frame = match camera.frame() {
@@ -293,13 +295,12 @@ fn capture_loop(
                                 aircontrol_core::HandTrackingState::PalmDetected
                             };
                             set_tracking_state(&runtime, &app, state, None);
-                            let tracked_hands = palms
-                                .iter()
-                                .filter_map(|palm| palm.finger_landmarks)
-                                .take(2)
-                                .map(Some)
-                                .collect::<Vec<_>>();
-                            let landmarks = tracked_hands.first().copied().flatten();
+                            let tracked_hands = associate_hand_landmarks(
+                                &mut hand_tracks,
+                                &palms,
+                                [image.width(), image.height()],
+                            );
+                            let landmarks = tracked_hands.iter().flatten().next().copied();
                             match cursor.update_hand_landmarks(
                                 landmarks,
                                 [image.width(), image.height()],
@@ -336,6 +337,7 @@ fn capture_loop(
                         }
                         Some(Err(error)) => {
                             hand_models = None;
+                            hand_tracks.reset();
                             let _ = cursor.update_hand_landmarks(
                                 None,
                                 [image.width(), image.height()],
@@ -355,6 +357,7 @@ fn capture_loop(
                             Vec::new()
                         }
                         None => {
+                            hand_tracks.reset();
                             let _ = keyboard.reset_modifiers();
                             let _ = cursor.update_hand_landmarks(
                                 None,
@@ -412,6 +415,95 @@ fn emit_preview(
     };
     app.emit(CAMERA_FRAME_EVENT, payload)
         .map_err(|error| format!("Preview frame could not be sent to the UI: {error}"))
+}
+
+fn associate_hand_landmarks(
+    associator: &mut HandTrackAssociator,
+    palms: &[crate::hand_tracking::PalmDetection],
+    frame_size: [u32; 2],
+) -> [Option<[[f32; 2]; 21]>; 2] {
+    let [width, height] = frame_size;
+    if width == 0 || height == 0 {
+        associator.reset();
+        return [None; 2];
+    }
+    let centers = palms
+        .iter()
+        .map(|palm| {
+            palm.finger_landmarks.map(|landmarks| {
+                [
+                    landmarks[0][0] / width as f32,
+                    landmarks[0][1] / height as f32,
+                ]
+            })
+        })
+        .collect::<Vec<_>>();
+    associator
+        .update(&centers)
+        .map(|index| index.and_then(|index| palms.get(index)?.finger_landmarks))
+}
+
+#[cfg(test)]
+mod hand_association_tests {
+    use super::*;
+    use crate::hand_tracking::PalmDetection;
+
+    fn palm_at(x: f32, confidence: f32) -> PalmDetection {
+        let mut finger_landmarks = [[0.0; 2]; 21];
+        finger_landmarks[0] = [x, 50.0];
+        PalmDetection {
+            bounds: [0.0; 4],
+            landmarks: [[0.0; 2]; 7],
+            finger_landmarks: Some(finger_landmarks),
+            confidence,
+        }
+    }
+
+    #[test]
+    fn camera_hand_landmarks_follow_tracks_not_detection_confidence_order() {
+        let mut associator = HandTrackAssociator::default();
+        let first = [palm_at(20.0, 0.9), palm_at(80.0, 0.8)];
+        let tracks = associate_hand_landmarks(&mut associator, &first, [100, 100]);
+        assert_eq!(tracks[0].unwrap()[0], [20.0, 50.0]);
+        assert_eq!(tracks[1].unwrap()[0], [80.0, 50.0]);
+
+        let reordered = [palm_at(81.0, 0.95), palm_at(19.0, 0.7)];
+        let tracks = associate_hand_landmarks(&mut associator, &reordered, [100, 100]);
+        assert_eq!(tracks[0].unwrap()[0], [19.0, 50.0]);
+        assert_eq!(tracks[1].unwrap()[0], [81.0, 50.0]);
+    }
+
+    #[test]
+    fn camera_uses_the_remaining_hand_without_reusing_lost_landmarks() {
+        let mut associator = HandTrackAssociator::default();
+        let both = [palm_at(20.0, 0.9), palm_at(80.0, 0.8)];
+        associate_hand_landmarks(&mut associator, &both, [100, 100]);
+
+        let remaining = [palm_at(82.0, 0.95)];
+        let tracks = associate_hand_landmarks(&mut associator, &remaining, [100, 100]);
+
+        assert!(tracks[0].is_none());
+        assert_eq!(tracks[1].unwrap()[0], [82.0, 50.0]);
+        assert_eq!(
+            tracks.iter().flatten().next().copied().unwrap()[0],
+            [82.0, 50.0]
+        );
+    }
+
+    #[test]
+    fn camera_association_resets_on_invalid_frame_geometry() {
+        let mut associator = HandTrackAssociator::default();
+        let palms = [palm_at(20.0, 0.9)];
+        associate_hand_landmarks(&mut associator, &palms, [100, 100]);
+
+        assert_eq!(
+            associate_hand_landmarks(&mut associator, &palms, [0, 100]),
+            [None, None]
+        );
+        let far = [palm_at(90.0, 0.9)];
+        let tracks = associate_hand_landmarks(&mut associator, &far, [100, 100]);
+        assert_eq!(tracks[0].unwrap()[0], [90.0, 50.0]);
+    }
 }
 
 fn fail_worker(
