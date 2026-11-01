@@ -9,6 +9,7 @@ mod camera;
 mod command_palette;
 mod cursor;
 mod hand_tracking;
+mod input_diagnostics;
 mod keyboard;
 mod settings;
 mod window_manager;
@@ -16,6 +17,8 @@ mod window_manager;
 #[derive(Clone, Default)]
 pub struct RuntimeState {
     snapshot: std::sync::Arc<std::sync::Mutex<RuntimeSnapshot>>,
+    gesture_settings:
+        std::sync::Arc<std::sync::Mutex<aircontrol_core::gesture_studio::GestureStudioSettings>>,
 }
 
 #[tauri::command]
@@ -35,9 +38,14 @@ fn load_preferences(app: AppHandle) -> Result<UserPreferences, String> {
 #[tauri::command]
 fn save_preferences(
     app: AppHandle,
+    runtime: State<'_, RuntimeState>,
     preferences: UserPreferences,
 ) -> Result<UserPreferences, String> {
-    settings::save(&app, preferences)
+    let saved = settings::save(&app, preferences)?;
+    if let Ok(mut current) = runtime.gesture_settings.lock() {
+        *current = saved.gesture_studio.clone();
+    }
+    Ok(saved)
 }
 
 #[tauri::command]
@@ -85,6 +93,9 @@ fn start_camera(
     device_id: String,
 ) -> Result<(), String> {
     let preferences = settings::load(&app)?;
+    if let Ok(mut current) = runtime.gesture_settings.lock() {
+        *current = preferences.gesture_studio.clone();
+    }
     camera_service.start(
         app,
         runtime.snapshot.clone(),
@@ -95,6 +106,7 @@ fn start_camera(
             keyboard: keyboard.inner().clone(),
             pinch_sensitivity: preferences.pinch_sensitivity,
             camera_mirrored: preferences.camera_mirrored,
+            gesture_settings: runtime.gesture_settings.clone(),
         },
     )
 }
@@ -161,6 +173,7 @@ fn set_cursor_control(
             reverse_scroll: preferences.reverse_scroll_direction,
             right_click_enabled: preferences.right_click_enabled,
             calibration: preferences.cursor_calibration,
+            gesture_studio: preferences.gesture_studio,
         })?;
         set_control_mode(
             &runtime,
@@ -210,12 +223,17 @@ fn set_window_control(
         })?;
         let preferences =
             preferences_for_activation(&app, window_manager::executable_for_window(selected))?;
+        let app_switch = preferences
+            .gesture_studio
+            .binding(aircontrol_core::gesture_studio::GestureId::ThreeFingerSwipe);
         cursor.disable()?;
         window_control.enable(
             selected,
             preferences.window_sensitivity,
             preferences.camera_mirrored,
-            preferences.app_switch_enabled,
+            preferences.app_switch_enabled && app_switch.enabled(),
+            app_switch.sensitivity,
+            app_switch.cooldown_ms,
         )?;
         set_control_mode(
             &runtime,
@@ -372,6 +390,60 @@ fn set_command_palette_control(
 }
 
 #[tauri::command]
+fn set_gesture_test_mode(
+    enabled: bool,
+    app: AppHandle,
+    runtime: State<'_, RuntimeState>,
+    cursor: State<'_, cursor::CursorController>,
+    window_control: State<'_, window_manager::WindowGestureController>,
+    keyboard: State<'_, keyboard::KeyboardController>,
+) -> Result<(), String> {
+    if enabled {
+        let snapshot = runtime
+            .snapshot
+            .lock()
+            .map_err(|_| "Runtime status is temporarily unavailable.".to_owned())?
+            .clone();
+        let readiness = aircontrol_core::ControlReadiness {
+            camera_running: snapshot.camera == aircontrol_core::CameraState::Running,
+            hand_pose_detected: snapshot.hand_tracking
+                == aircontrol_core::HandTrackingState::Detected,
+        };
+        if !readiness.can_enable() {
+            return Err(
+                "Start the camera and wait for hand tracking before testing gestures.".to_owned(),
+            );
+        }
+        if snapshot.control_mode != aircontrol_core::ControlMode::Disabled {
+            return Err(
+                "Stop all system control modes before starting safe gesture testing.".to_owned(),
+            );
+        }
+        // This path is deliberately non-dispatching; it refuses if a mouse
+        // button may still be held instead of emitting a release event.
+        cursor.prepare_safe_testing()?;
+        window_control.disable()?;
+        keyboard.reset()?;
+        set_control_mode(
+            &runtime,
+            &app,
+            aircontrol_core::ControlMode::GestureTest,
+            snapshot.active_profile_id,
+        );
+    } else {
+        let mode = runtime
+            .snapshot
+            .lock()
+            .map_err(|_| "Runtime status is temporarily unavailable.".to_owned())?
+            .control_mode;
+        if mode == aircontrol_core::ControlMode::GestureTest {
+            set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled, None);
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn execute_palette_command(
     command_id: String,
     runtime: State<'_, RuntimeState>,
@@ -450,7 +522,8 @@ fn get_foreground_control_window() -> Result<Option<window_manager::WindowInfo>,
 }
 
 #[tauri::command]
-fn focus_control_window(handle: String) -> Result<(), String> {
+fn focus_control_window(handle: String, runtime: State<'_, RuntimeState>) -> Result<(), String> {
+    reject_native_action_during_test(&runtime)?;
     window_manager::focus_window(&handle)
 }
 
@@ -458,7 +531,9 @@ fn focus_control_window(handle: String) -> Result<(), String> {
 fn move_control_window(
     handle: String,
     delta: [f32; 2],
+    runtime: State<'_, RuntimeState>,
 ) -> Result<aircontrol_core::window::WindowRect, String> {
+    reject_native_action_during_test(&runtime)?;
     window_manager::move_window_by(&handle, delta)
 }
 
@@ -466,18 +541,35 @@ fn move_control_window(
 fn resize_control_window(
     handle: String,
     scale: f32,
+    runtime: State<'_, RuntimeState>,
 ) -> Result<aircontrol_core::window::WindowRect, String> {
+    reject_native_action_during_test(&runtime)?;
     window_manager::resize_window_by(&handle, scale)
 }
 
 #[tauri::command]
-fn minimize_control_window(handle: String) -> Result<(), String> {
+fn minimize_control_window(handle: String, runtime: State<'_, RuntimeState>) -> Result<(), String> {
+    reject_native_action_during_test(&runtime)?;
     window_manager::minimize_window(&handle)
 }
 
 #[tauri::command]
-fn maximize_control_window(handle: String) -> Result<(), String> {
+fn maximize_control_window(handle: String, runtime: State<'_, RuntimeState>) -> Result<(), String> {
+    reject_native_action_during_test(&runtime)?;
     window_manager::maximize_window(&handle)
+}
+
+fn reject_native_action_during_test(runtime: &RuntimeState) -> Result<(), String> {
+    let snapshot = runtime
+        .snapshot
+        .lock()
+        .map_err(|_| "Runtime status is temporarily unavailable.".to_owned())?;
+    if snapshot.control_mode == aircontrol_core::ControlMode::GestureTest {
+        return Err(
+            "Native actions are disabled while Gesture Studio safe testing is active.".to_owned(),
+        );
+    }
+    Ok(())
 }
 
 fn set_control_mode(
@@ -491,11 +583,14 @@ fn set_control_mode(
         snapshot.active_profile_id = active_profile_id;
         snapshot.palette_hovered_index = None;
         snapshot.palette_message = None;
+        snapshot.gesture_test_action = None;
+        snapshot.gesture_confidence = None;
         snapshot.active_gesture = match mode {
             aircontrol_core::ControlMode::Cursor => aircontrol_core::ActiveGesture::Cursor,
             aircontrol_core::ControlMode::CommandPalette => {
                 aircontrol_core::ActiveGesture::CommandPalette
             }
+            aircontrol_core::ControlMode::GestureTest => aircontrol_core::ActiveGesture::None,
             aircontrol_core::ControlMode::Disabled
             | aircontrol_core::ControlMode::Window
             | aircontrol_core::ControlMode::AirKeyboard => aircontrol_core::ActiveGesture::None,
@@ -562,6 +657,7 @@ pub fn run() {
             set_window_control,
             set_air_keyboard_control,
             set_command_palette_control,
+            set_gesture_test_mode,
             execute_palette_command,
             press_air_keyboard_key,
             list_control_windows,

@@ -49,6 +49,22 @@ impl AppSwitchSwipeRecognizer {
     const MINIMUM_VELOCITY: f32 = 0.38;
 
     pub fn update(&mut self, point: Option<[f32; 2]>, now: Instant) -> Option<SwipeDirection> {
+        self.update_with_settings(point, now, 1.0, Self::COOLDOWN)
+    }
+
+    pub fn update_with_settings(
+        &mut self,
+        point: Option<[f32; 2]>,
+        now: Instant,
+        sensitivity: f32,
+        cooldown: Duration,
+    ) -> Option<SwipeDirection> {
+        let sensitivity = if sensitivity.is_finite() {
+            sensitivity.clamp(0.6, 1.4)
+        } else {
+            1.0
+        };
+        let cooldown = cooldown.clamp(Duration::from_millis(100), Duration::from_millis(2_000));
         let Some(point) = point.filter(|point| {
             point
                 .iter()
@@ -77,9 +93,10 @@ impl AppSwitchSwipeRecognizer {
         }
 
         if elapsed < Self::MINIMUM_DURATION
-            || delta_x.abs() < Self::MINIMUM_DISTANCE
+            || delta_x.abs() < Self::MINIMUM_DISTANCE / sensitivity
             || delta_y > Self::MAXIMUM_VERTICAL_DRIFT
-            || delta_x.abs() / elapsed.as_secs_f32().max(f32::EPSILON) < Self::MINIMUM_VELOCITY
+            || delta_x.abs() / elapsed.as_secs_f32().max(f32::EPSILON)
+                < Self::MINIMUM_VELOCITY / sensitivity
         {
             return None;
         }
@@ -87,7 +104,7 @@ impl AppSwitchSwipeRecognizer {
         self.start = None;
         let cooled_down = self
             .last_emitted_at
-            .is_none_or(|last| now.saturating_duration_since(last) >= Self::COOLDOWN);
+            .is_none_or(|last| now.saturating_duration_since(last) >= cooldown);
         if !cooled_down {
             return None;
         }
@@ -207,6 +224,52 @@ mod tests {
         );
         assert_eq!(
             recognizer.update(Some([0.5, 0.5]), start + Duration::from_millis(2_200)),
+            None
+        );
+    }
+
+    #[test]
+    fn sensitivity_and_cooldown_settings_change_the_swipe_thresholds() {
+        let start = Instant::now();
+        let mut sensitive = AppSwitchSwipeRecognizer::default();
+        assert_eq!(
+            sensitive.update_with_settings(
+                Some([0.3, 0.5]),
+                start,
+                1.4,
+                Duration::from_millis(100)
+            ),
+            None
+        );
+        assert_eq!(
+            sensitive.update_with_settings(
+                Some([0.5, 0.5]),
+                start + Duration::from_millis(240),
+                1.4,
+                Duration::from_millis(100),
+            ),
+            Some(SwipeDirection::Next)
+        );
+
+        sensitive.update_with_settings(
+            None,
+            start + Duration::from_millis(250),
+            1.4,
+            Duration::from_millis(2_000),
+        );
+        sensitive.update_with_settings(
+            Some([0.3, 0.5]),
+            start + Duration::from_millis(300),
+            1.4,
+            Duration::from_millis(2_000),
+        );
+        assert_eq!(
+            sensitive.update_with_settings(
+                Some([0.5, 0.5]),
+                start + Duration::from_millis(540),
+                1.4,
+                Duration::from_millis(2_000),
+            ),
             None
         );
     }

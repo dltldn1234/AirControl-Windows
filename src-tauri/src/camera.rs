@@ -4,6 +4,7 @@ use crate::keyboard::KeyboardController;
 use crate::window_manager::WindowGestureController;
 use aircontrol_core::command_palette::CommandPaletteStateMachine;
 use aircontrol_core::gesture::{PinchAction, next_cursor_gesture};
+use aircontrol_core::gesture_studio::{GestureStudioSettings, GestureTestSession};
 use aircontrol_core::hand_tracking::HandTrackAssociator;
 use aircontrol_core::{CameraState, RuntimeSnapshot};
 use base64::Engine;
@@ -64,6 +65,7 @@ pub(super) struct GestureControl {
     pub(super) keyboard: KeyboardController,
     pub(super) pinch_sensitivity: f32,
     pub(super) camera_mirrored: bool,
+    pub(super) gesture_settings: Arc<Mutex<GestureStudioSettings>>,
 }
 
 #[derive(Default)]
@@ -185,6 +187,7 @@ fn capture_loop(
         keyboard,
         pinch_sensitivity,
         camera_mirrored,
+        gesture_settings,
     } = controls;
     set_camera_state(&runtime, &app, CameraState::Starting, None);
     set_tracking_state(
@@ -254,6 +257,12 @@ fn capture_loop(
     let mut last_preview = Instant::now();
     let mut hand_tracks = HandTrackAssociator::default();
     let mut command_palette = CommandPaletteStateMachine::default();
+    let mut gesture_test = GestureTestSession::default();
+    let mut diagnostics_sampler = crate::input_diagnostics::ProcessUsageSampler::default();
+    let mut metrics_started_at = Instant::now();
+    let mut camera_frames = 0_u64;
+    let mut tracked_frames = 0_u64;
+    let mut tracking_was_present = false;
 
     while !stop.load(Ordering::Acquire) {
         let frame = match camera.frame() {
@@ -271,23 +280,68 @@ fn capture_loop(
                 return;
             }
         };
+        camera_frames = camera_frames.saturating_add(1);
+        let metrics_elapsed = metrics_started_at.elapsed();
+        if metrics_elapsed >= Duration::from_secs(1) {
+            let seconds = metrics_elapsed.as_secs_f32().max(f32::EPSILON);
+            let usage = diagnostics_sampler.sample(metrics_elapsed);
+            if let Ok(mut snapshot) = runtime.lock() {
+                snapshot.diagnostics.camera_fps = Some(camera_frames as f32 / seconds);
+                snapshot.diagnostics.tracking_fps = Some(tracked_frames as f32 / seconds);
+                snapshot.diagnostics.input_event_count =
+                    crate::input_diagnostics::input_event_count();
+                snapshot.diagnostics.process_cpu_percent = usage.cpu_percent;
+                snapshot.diagnostics.process_memory_bytes = usage.memory_bytes;
+                snapshot.frames_per_second = snapshot.diagnostics.camera_fps;
+                let _ = app.emit("runtime-status", snapshot.clone());
+            }
+            camera_frames = 0;
+            tracked_frames = 0;
+            metrics_started_at = Instant::now();
+        }
 
         if last_preview.elapsed() >= PREVIEW_INTERVAL {
             match frame.decode_image::<RgbFormat>() {
                 Ok(image) => {
+                    let inference_started = Instant::now();
                     let inference = hand_models
                         .as_mut()
                         .map(|models| models.detect_palms(&image));
+                    let inference_latency_ms = inference_started.elapsed().as_secs_f32() * 1_000.0;
+                    if let Ok(mut snapshot) = runtime.lock() {
+                        snapshot.diagnostics.inference_latency_ms =
+                            hand_models.as_ref().map(|_| inference_latency_ms);
+                    }
                     let palms = match inference {
                         Some(Ok(palms)) => {
-                            let keyboard_active = runtime.lock().is_ok_and(|snapshot| {
-                                snapshot.control_mode == aircontrol_core::ControlMode::AirKeyboard
-                            });
+                            let current_mode = runtime
+                                .lock()
+                                .map(|snapshot| snapshot.control_mode)
+                                .unwrap_or(aircontrol_core::ControlMode::Disabled);
+                            let keyboard_active =
+                                current_mode == aircontrol_core::ControlMode::AirKeyboard;
                             let keyboard_bounds = keyboard_active
                                 .then(|| crate::keyboard::overlay_bounds(&app))
                                 .flatten();
                             let _ = cursor.update_keyboard_bounds(keyboard_bounds);
                             let has_pose = palms.iter().any(|palm| palm.finger_landmarks.is_some());
+                            let confidence = palms
+                                .iter()
+                                .find(|palm| palm.finger_landmarks.is_some())
+                                .map(|palm| palm.confidence);
+                            if let Ok(mut snapshot) = runtime.lock() {
+                                snapshot.gesture_confidence = confidence;
+                            }
+                            if has_pose {
+                                tracked_frames = tracked_frames.saturating_add(1);
+                                tracking_was_present = true;
+                            } else if tracking_was_present {
+                                tracking_was_present = false;
+                                if let Ok(mut snapshot) = runtime.lock() {
+                                    snapshot.diagnostics.tracking_loss_count =
+                                        snapshot.diagnostics.tracking_loss_count.saturating_add(1);
+                                }
+                            }
                             if !has_pose {
                                 let _ = keyboard.reset_modifiers();
                             }
@@ -313,36 +367,75 @@ fn capture_loop(
                                 camera_mirrored,
                             );
                             let landmarks = tracked_hands.iter().flatten().next().copied();
-                            match cursor.update_hand_landmarks(
-                                landmarks,
-                                [image.width(), image.height()],
-                                pinch_sensitivity,
-                            ) {
-                                Ok(action) => set_cursor_gesture(&runtime, &app, action),
-                                Err(error) => {
-                                    log::warn!(
-                                        "Cursor control stopped after an input error: {error}"
-                                    );
-                                    let _ = cursor.disable();
-                                    let _ = window_control.disable();
-                                    let _ = keyboard.reset();
-                                    set_control_disabled(&runtime, &app);
+                            if current_mode == aircontrol_core::ControlMode::GestureTest {
+                                if !gesture_test.is_active() {
+                                    gesture_test.start();
                                 }
-                            }
-                            match window_control.update_hand_landmarks(
-                                &tracked_hands,
-                                [image.width(), image.height()],
-                                pinch_sensitivity,
-                            ) {
-                                Ok(gesture) => crate::set_window_gesture(&runtime, &app, gesture),
-                                Err(error) => {
-                                    log::warn!(
-                                        "Window control stopped after an input error: {error}"
-                                    );
-                                    let _ = window_control.disable();
-                                    let _ = cursor.disable();
-                                    let _ = keyboard.reset();
-                                    set_control_disabled(&runtime, &app);
+                                let settings = gesture_settings
+                                    .lock()
+                                    .map(|settings| settings.clone())
+                                    .unwrap_or_default();
+                                let gesture_started = Instant::now();
+                                let update = gesture_test.update(
+                                    landmarks,
+                                    [image.width(), image.height()],
+                                    camera_mirrored,
+                                    confidence,
+                                    &settings,
+                                    gesture_started,
+                                );
+                                if let Ok(mut snapshot) = runtime.lock() {
+                                    snapshot.active_gesture = update.active_gesture;
+                                    snapshot.gesture_test_action = update.expected_action;
+                                    snapshot.gesture_confidence = update.confidence;
+                                    snapshot.diagnostics.gesture_latency_ms =
+                                        Some(gesture_started.elapsed().as_secs_f32() * 1_000.0);
+                                    let _ = app.emit("runtime-status", snapshot.clone());
+                                }
+                            } else {
+                                if gesture_test.is_active() {
+                                    gesture_test.stop();
+                                }
+                                let gesture_started = Instant::now();
+                                match cursor.update_hand_landmarks(
+                                    landmarks,
+                                    [image.width(), image.height()],
+                                    pinch_sensitivity,
+                                ) {
+                                    Ok(action) => set_cursor_gesture(&runtime, &app, action),
+                                    Err(error) => {
+                                        log::warn!(
+                                            "Cursor control stopped after an input error: {error}"
+                                        );
+                                        let _ = cursor.disable();
+                                        let _ = window_control.disable();
+                                        let _ = keyboard.reset();
+                                        set_control_disabled(&runtime, &app);
+                                    }
+                                }
+                                match window_control.update_hand_landmarks(
+                                    &tracked_hands,
+                                    [image.width(), image.height()],
+                                    pinch_sensitivity,
+                                ) {
+                                    Ok(gesture) => {
+                                        crate::set_window_gesture(&runtime, &app, gesture)
+                                    }
+                                    Err(error) => {
+                                        log::warn!(
+                                            "Window control stopped after an input error: {error}"
+                                        );
+                                        let _ = window_control.disable();
+                                        let _ = cursor.disable();
+                                        let _ = keyboard.reset();
+                                        set_control_disabled(&runtime, &app);
+                                    }
+                                }
+                                if let Ok(mut snapshot) = runtime.lock() {
+                                    snapshot.diagnostics.gesture_latency_ms =
+                                        Some(gesture_started.elapsed().as_secs_f32() * 1_000.0);
+                                    snapshot.diagnostics.input_event_count =
+                                        crate::input_diagnostics::input_event_count();
                                 }
                             }
                             palms
@@ -350,11 +443,23 @@ fn capture_loop(
                         Some(Err(error)) => {
                             hand_models = None;
                             hand_tracks.reset();
-                            let _ = cursor.update_hand_landmarks(
-                                None,
-                                [image.width(), image.height()],
-                                pinch_sensitivity,
-                            );
+                            gesture_test.stop();
+                            if tracking_was_present {
+                                tracking_was_present = false;
+                                if let Ok(mut snapshot) = runtime.lock() {
+                                    snapshot.diagnostics.tracking_loss_count =
+                                        snapshot.diagnostics.tracking_loss_count.saturating_add(1);
+                                }
+                            }
+                            if runtime.lock().is_ok_and(|snapshot| {
+                                snapshot.control_mode != aircontrol_core::ControlMode::GestureTest
+                            }) {
+                                let _ = cursor.update_hand_landmarks(
+                                    None,
+                                    [image.width(), image.height()],
+                                    pinch_sensitivity,
+                                );
+                            }
                             let _ = cursor.disable();
                             let _ = window_control.disable();
                             let _ = keyboard.reset();
@@ -371,21 +476,34 @@ fn capture_loop(
                         None => {
                             hand_tracks.reset();
                             let _ = keyboard.reset_modifiers();
-                            let _ = cursor.update_hand_landmarks(
-                                None,
-                                [image.width(), image.height()],
-                                pinch_sensitivity,
-                            );
-                            let _ = window_control.update_hand_landmarks(
-                                &[],
-                                [image.width(), image.height()],
-                                pinch_sensitivity,
-                            );
-                            crate::set_window_gesture(
-                                &runtime,
-                                &app,
-                                aircontrol_core::ActiveGesture::None,
-                            );
+                            if runtime.lock().is_ok_and(|snapshot| {
+                                snapshot.control_mode != aircontrol_core::ControlMode::GestureTest
+                            }) {
+                                let _ = cursor.update_hand_landmarks(
+                                    None,
+                                    [image.width(), image.height()],
+                                    pinch_sensitivity,
+                                );
+                                let _ = window_control.update_hand_landmarks(
+                                    &[],
+                                    [image.width(), image.height()],
+                                    pinch_sensitivity,
+                                );
+                                crate::set_window_gesture(
+                                    &runtime,
+                                    &app,
+                                    aircontrol_core::ActiveGesture::None,
+                                );
+                            } else if gesture_test.is_active() {
+                                gesture_test.stop();
+                                if let Ok(mut snapshot) = runtime.lock() {
+                                    snapshot.control_mode = aircontrol_core::ControlMode::Disabled;
+                                    snapshot.active_gesture = aircontrol_core::ActiveGesture::None;
+                                    snapshot.gesture_test_action = None;
+                                    snapshot.gesture_confidence = None;
+                                    let _ = app.emit("runtime-status", snapshot.clone());
+                                }
+                            }
                             Vec::new()
                         }
                     };

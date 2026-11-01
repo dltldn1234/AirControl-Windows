@@ -1,5 +1,14 @@
 # Development Progress
 
+## Current checkpoint (2026-11-01, Issue #29)
+
+- Starting `origin/main`: 121 commits at `a91a8c0`. Work is isolated in `~/Developer/Worktrees/AirControl-Windows/29-feat-gesture-studio` on `29-feat/gesture-studio`; original checkout and its untracked files remain untouched.
+- Added profile-scoped gesture bindings, action/sensitivity/cooldown validation, conflict reporting, runtime application, and legacy preference defaults.
+- Added Gesture Studio with local camera controls, mirrored 21-joint preview, confidence and recognized state, editable bindings, profile selection/reset/save, and measured diagnostics.
+- Added a Rust safe-test mode that classifies gestures without calling native action dispatchers. It requires camera and full-pose readiness; existing mode guards block direct system actions; stop, tracking loss, camera stop, and inference failure reset the session.
+- Local macOS-host verification: Rust workspace 118 tests passed (84 core, 34 app); formatting and Clippy with warnings denied passed. Frontend TypeScript/Vite build passed, Vitest 36 passed, and Playwright Chromium 10 passed. Windows-only `windows-sys` compilation and actual camera/runtime input behavior await PR CI and Windows PC testing.
+- Windows CI has not yet been run for this Issue. Next: review the complete diff, commit the verified units, push, open the Issue #29 PR, and merge only after all Windows checks pass.
+
 ## Current checkpoint (2026-11-01, Issue #27)
 
 - Baseline `origin/main`: 116 commits at `94bbdc7`; work is isolated in `~/Developer/Worktrees/AirControl-Windows/27-feat-air-command-palette` on `27-feat/air-command-palette`.

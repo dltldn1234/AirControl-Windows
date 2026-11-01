@@ -9,7 +9,7 @@ export type CameraState =
   | "error";
 
 export type HandTrackingState = "waiting" | "modelLoading" | "modelReady" | "palmDetected" | "detected" | "lost" | "error";
-export type ControlMode = "disabled" | "cursor" | "window" | "airKeyboard" | "commandPalette";
+export type ControlMode = "disabled" | "cursor" | "window" | "airKeyboard" | "commandPalette" | "gestureTest";
 export type ActiveGesture = "none" | "cursor" | "click" | "drag" | "scroll" | "rightClick" | "windowMove" | "windowResize" | "appSwitch" | "commandPalette";
 
 export interface RuntimeSnapshot {
@@ -21,6 +21,18 @@ export interface RuntimeSnapshot {
   activeProfileId: string | null;
   paletteHoveredIndex?: number | null;
   paletteMessage?: string | null;
+  gestureTestAction?: import("./gestureStudio").GestureAction | null;
+  gestureConfidence?: number | null;
+  diagnostics?: {
+    cameraFps: number | null;
+    trackingFps: number | null;
+    inferenceLatencyMs: number | null;
+    gestureLatencyMs: number | null;
+    trackingLossCount: number;
+    inputEventCount: number;
+    processCpuPercent: number | null;
+    processMemoryBytes: number | null;
+  };
 }
 
 export function canEnableCursorControl(

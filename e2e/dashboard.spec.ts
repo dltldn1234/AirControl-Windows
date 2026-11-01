@@ -38,6 +38,19 @@ test("command palette shows an explicit allowlist without sending actions in bro
   await expect(page.getByText("System commands remain inactive until you open the palette.")).toBeVisible();
 });
 
+test("Gesture Studio exposes bindings and keeps safe testing disabled outside the desktop runtime", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Gesture Studio" }).click();
+
+  await expect(page.getByRole("heading", { level: 1, name: "Gesture Studio" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Index pinch.*Click and drag/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("combobox", { name: "Assigned action" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Start test" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  await expect(page.getByText("Camera FPS")).toBeVisible();
+  await expect(page.getByText(/Open the Windows desktop app/)).toBeVisible();
+});
+
 test("gesture app switching is an explicit desktop-only preference", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Settings" }).click();

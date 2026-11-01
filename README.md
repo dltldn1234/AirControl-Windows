@@ -2,7 +2,7 @@
 
 AirControl is a local-first Windows desktop application for controlling a PC with hand gestures. The Windows edition is built with Tauri 2, a Rust core, and a React + TypeScript interface.
 
-> **Development status:** the desktop shell, runtime status bridge, local preference storage, dashboard, opt-in native camera enumeration/preview, local ONNX palm plus 21-point hand landmark inference, cursor/mouse gestures, window control, Air Keyboard, gesture-driven app switching, and cursor calibration are implemented. Named profiles and opt-in application-specific profile selection are implemented in Issue #25. Windows hardware behavior remains unverified on this macOS development host. Camera, keyboard IME, window activation, and physical cursor behavior still need Windows PC validation.
+> **Development status:** the desktop shell, runtime status bridge, local preference storage, dashboard, opt-in native camera enumeration/preview, local ONNX palm plus 21-point hand landmark inference, cursor/mouse gestures, window control, Air Keyboard, gesture-driven app switching, cursor calibration, named profiles, application-specific profiles, and Gesture Studio are implemented. Windows hardware behavior remains unverified on this macOS development host. Camera, keyboard IME, window activation, and physical cursor behavior still need Windows PC validation.
 
 ## Technology
 
@@ -48,6 +48,10 @@ npm run test:e2e
 
 React does not generate operating-system input. Cursor, window, and keyboard control belongs in Rust services behind explicit readiness and user activation gates.
 Named control profiles and optional executable-to-profile mappings are stored locally; see [control profiles](docs/CONTROL_PROFILES.md).
+
+## Gesture Studio
+
+Open **Gesture Studio** to configure profile-specific gesture actions, sensitivity, and cooldown. The live preview displays hand landmarks and confidence. Safe Testing Mode exercises gesture recognition and shows predicted actions without dispatching Windows input; Rust blocks native action paths while the mode is active. Diagnostics display measured camera/tracking rates, inference and gesture latency, tracking-loss count, successful `SendInput` events, and Windows process CPU/memory where available. See [Gesture Studio details](docs/GESTURE_STUDIO.md).
 
 ## Air Command Palette
 

@@ -105,6 +105,36 @@ mod tests {
     }
 
     #[test]
+    fn gesture_bindings_are_saved_and_restored_per_profile() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let path = directory.path().join("preferences.json");
+        let mut preferences = UserPreferences::default();
+        preferences.gesture_studio.bindings[0].action =
+            aircontrol_core::gesture_studio::GestureAction::Click;
+        preferences.gesture_studio.bindings[0].sensitivity = 1.25;
+        preferences.gesture_studio.bindings[0].cooldown_ms = 700;
+        preferences.profiles[0].settings.gesture_studio = preferences.gesture_studio.clone();
+        preferences.profiles[1].settings.gesture_studio.bindings[0].action =
+            aircontrol_core::gesture_studio::GestureAction::Drag;
+
+        save_to_path(&path, preferences).expect("save gesture settings");
+        let loaded = load_from_path(&path).expect("load gesture settings");
+        assert_eq!(
+            loaded.gesture_studio.bindings[0].action,
+            aircontrol_core::gesture_studio::GestureAction::Click
+        );
+        assert_eq!(loaded.gesture_studio.bindings[0].sensitivity, 1.25);
+        assert_eq!(loaded.gesture_studio.bindings[0].cooldown_ms, 700);
+        let presentation = loaded
+            .select_profile("presentation")
+            .expect("select presentation profile");
+        assert_eq!(
+            presentation.gesture_studio.bindings[0].action,
+            aircontrol_core::gesture_studio::GestureAction::Drag
+        );
+    }
+
+    #[test]
     fn preferences_saved_before_right_click_setting_use_enabled_default() {
         let old_preferences = br#"{
             "cursorSensitivity": 1.4,

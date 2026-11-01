@@ -74,6 +74,9 @@ mod platform {
                 size_of::<INPUT>() as i32,
             )
         };
+        if sent > 0 {
+            crate::input_diagnostics::record_input_events(sent as usize);
+        }
         if sent == events.len() as u32 {
             Ok(())
         } else {
@@ -81,13 +84,16 @@ mod platform {
                 .iter()
                 .map(|key| key_event(*key, true))
                 .collect();
-            let _ = unsafe {
+            let released = unsafe {
                 SendInput(
                     releases.len() as u32,
                     releases.as_ptr(),
                     size_of::<INPUT>() as i32,
                 )
             };
+            if released > 0 {
+                crate::input_diagnostics::record_input_events(released as usize);
+            }
             Err("Windows rejected the command input. A protected or higher-integrity app may block it.".to_owned())
         }
     }

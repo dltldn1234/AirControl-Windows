@@ -1,3 +1,5 @@
+import { DEFAULT_GESTURE_STUDIO, type GestureStudioSettings } from "./gestureStudio";
+
 export interface UserPreferences {
   cursorSensitivity: number;
   cursorSmoothing: number;
@@ -13,6 +15,7 @@ export interface UserPreferences {
   profiles: ControlProfile[];
   autoProfileEnabled: boolean;
   appProfileRules: AppProfileRule[];
+  gestureStudio: GestureStudioSettings;
 }
 
 export interface AppProfileRule {
@@ -39,6 +42,7 @@ const defaultProfileSettings: ProfileSettings = {
   rightClickEnabled: true,
   cameraMirrored: true,
   appSwitchEnabled: false,
+  gestureStudio: DEFAULT_GESTURE_STUDIO,
 };
 
 export const BUILT_IN_PROFILES: ControlProfile[] = [
@@ -74,6 +78,7 @@ function currentProfileSettings(preferences: UserPreferences): ProfileSettings {
     rightClickEnabled: preferences.rightClickEnabled,
     cameraMirrored: preferences.cameraMirrored,
     appSwitchEnabled: preferences.appSwitchEnabled,
+    gestureStudio: preferences.gestureStudio,
   };
 }
 
