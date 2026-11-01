@@ -43,6 +43,7 @@ struct CameraFrameEvent {
     jpeg_base64: String,
     width: u32,
     height: u32,
+    palms: Vec<crate::hand_tracking::PalmDetection>,
 }
 
 struct CameraWorker {
@@ -169,13 +170,13 @@ fn capture_loop(
         aircontrol_core::HandTrackingState::ModelLoading,
         None,
     );
-    let _hand_models = match HandTrackingModels::load() {
+    let mut hand_models = match HandTrackingModels::load() {
         Ok(models) => {
             set_tracking_state(
                 &runtime,
                 &app,
                 aircontrol_core::HandTrackingState::ModelReady,
-                Some("ONNX models loaded; live landmark inference is not connected yet."),
+                Some("ONNX models loaded; waiting for camera frames."),
             );
             Some(models)
         }
@@ -223,8 +224,39 @@ fn capture_loop(
         };
 
         if last_preview.elapsed() >= PREVIEW_INTERVAL {
-            if let Err(error) = emit_preview(&app, &frame) {
-                log::warn!("Camera preview frame could not be encoded: {error}");
+            match frame.decode_image::<RgbFormat>() {
+                Ok(image) => {
+                    let inference = hand_models
+                        .as_mut()
+                        .map(|models| models.detect_palms(&image));
+                    let palms = match inference {
+                        Some(Ok(palms)) => {
+                            let state = if palms.is_empty() {
+                                aircontrol_core::HandTrackingState::Lost
+                            } else {
+                                aircontrol_core::HandTrackingState::Detected
+                            };
+                            set_tracking_state(&runtime, &app, state, None);
+                            palms
+                        }
+                        Some(Err(error)) => {
+                            hand_models = None;
+                            set_tracking_state(
+                                &runtime,
+                                &app,
+                                aircontrol_core::HandTrackingState::Error,
+                                Some(&error),
+                            );
+                            log::error!("Hand inference stopped after a model error: {error}");
+                            Vec::new()
+                        }
+                        None => Vec::new(),
+                    };
+                    if let Err(error) = emit_preview(&app, &image, &palms) {
+                        log::warn!("Camera preview frame could not be encoded: {error}");
+                    }
+                }
+                Err(error) => log::warn!("Camera preview frame could not be decoded: {error}"),
             }
             last_preview = Instant::now();
         }
@@ -235,12 +267,13 @@ fn capture_loop(
     finished.store(true, Ordering::Release);
 }
 
-fn emit_preview(app: &AppHandle, frame: &nokhwa::Buffer) -> Result<(), String> {
-    let image = frame
-        .decode_image::<RgbFormat>()
-        .map_err(|error| format!("Frame decoding failed: {error}"))?;
+fn emit_preview(
+    app: &AppHandle,
+    image: &image::RgbImage,
+    palms: &[crate::hand_tracking::PalmDetection],
+) -> Result<(), String> {
     let (width, height) = preview_dimensions(image.width(), image.height());
-    let resized = image::imageops::resize(&image, width, height, FilterType::Triangle);
+    let resized = image::imageops::resize(image, width, height, FilterType::Triangle);
     let mut jpeg = Cursor::new(Vec::new());
     JpegEncoder::new_with_quality(&mut jpeg, 72)
         .encode_image(&resized)
@@ -249,6 +282,7 @@ fn emit_preview(app: &AppHandle, frame: &nokhwa::Buffer) -> Result<(), String> {
         jpeg_base64: base64::engine::general_purpose::STANDARD.encode(jpeg.into_inner()),
         width,
         height,
+        palms: palms.to_vec(),
     };
     app.emit(CAMERA_FRAME_EVENT, payload)
         .map_err(|error| format!("Preview frame could not be sent to the UI: {error}"))
