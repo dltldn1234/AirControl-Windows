@@ -18,6 +18,7 @@ export interface RuntimeSnapshot {
   controlMode: ControlMode;
   activeGesture: ActiveGesture;
   framesPerSecond: number | null;
+  activeProfileId: string | null;
 }
 
 export function canEnableCursorControl(

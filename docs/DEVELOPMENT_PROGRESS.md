@@ -1,5 +1,15 @@
 # Development Progress
 
+## Current state (2026-11-01, Issue #25)
+
+- Baseline `origin/main`: 111 commits at `843cd35`; current feature branch `25-feat/app-specific-profiles` contains the existing domain-model commit `71fe3c4` plus in-progress implementation changes.
+- Added opt-in per-executable profile rules, lowercase executable basename normalization, duplicate/dangling mapping validation, deleted-profile cleanup, and in-memory application of mapped preferences. The saved manual profile remains the fallback and is not overwritten by automatic selection.
+- Windows mode activation reads process identity with `GetForegroundWindow` / `GetWindowThreadProcessId`, `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)`, and `QueryFullProcessImageNameW`; it keeps only the executable basename and closes process handles. Protected/unreadable processes safely fall back. Window mode queries the selected target; other modes query the foreground process once at activation (no polling).
+- Settings now support opt-in, add/update/remove mappings, profile selection, and active runtime profile display. Deleting a custom profile removes its application mappings. Existing preference JSON retains safe defaults.
+- Cleanup: 12 Git worktrees were initially registered across the macOS and Windows repositories. Nine clean worktrees whose Issues and PRs were closed/merged were removed. The two original repositories were retained, and the active Issue #25 worktree was moved to `~/Developer/Worktrees/AirControl-Windows/25-feat-app-specific-profiles`. `AirControl-builds` was retained because it is a non-Git directory containing app bundles. The original Windows checkout's two untracked files were preserved.
+- Local validation: Rust workspace tests passed (core 69, app 27); `cargo fmt --all -- --check` passed after formatting. Vitest 29 tests passed and `npm run build` passed. Windows-only API compilation and behavior still require Windows CI and a Windows PC.
+- Next: run Clippy, final diff review, commit scoped changes, push branch, create PR #25, and merge only after Windows CI succeeds. Manual validation must cover foreground app profile selection and protected process fallback.
+
 ## Current state (2026-11-01, Issue #23)
 
 - Current `origin/main`: 94 commits at `c9cc32c`; 107 meaningful commits remain to reach the user's 201-commit target. No filler commits will be created.

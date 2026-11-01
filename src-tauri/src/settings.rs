@@ -89,6 +89,11 @@ mod tests {
                 right: 0.88,
                 bottom: 0.92,
             },
+            auto_profile_enabled: true,
+            app_profile_rules: vec![aircontrol_core::app_profile::AppProfileRule {
+                executable: "editor.exe".to_owned(),
+                profile_id: "presentation".to_owned(),
+            }],
             ..UserPreferences::default()
         };
         let saved = save_to_path(&path, requested.clone()).expect("save preferences");
@@ -114,6 +119,8 @@ mod tests {
 
         assert!(parsed.right_click_enabled);
         assert!(!parsed.app_switch_enabled);
+        assert!(!parsed.auto_profile_enabled);
+        assert!(parsed.app_profile_rules.is_empty());
         assert_eq!(
             parsed.cursor_calibration,
             aircontrol_core::cursor::CursorCalibration::default()

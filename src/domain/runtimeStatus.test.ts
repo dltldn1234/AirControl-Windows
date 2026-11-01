@@ -29,6 +29,7 @@ describe("runtime status labels", () => {
       controlMode: "disabled",
       activeGesture: "none",
       framesPerSecond: 10,
+      activeProfileId: null,
     };
     expect(canEnableCursorControl(ready, "connected")).toBe(true);
     expect(canEnableCursorControl(ready, "preview")).toBe(false);

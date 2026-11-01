@@ -1,6 +1,7 @@
 use crate::cursor::CursorCalibration;
 use serde::{Deserialize, Serialize};
 
+pub mod app_profile;
 pub mod app_switch;
 pub mod cursor;
 pub mod filter;
@@ -70,6 +71,7 @@ pub struct RuntimeSnapshot {
     pub control_mode: ControlMode,
     pub active_gesture: ActiveGesture,
     pub frames_per_second: Option<f32>,
+    pub active_profile_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -100,6 +102,8 @@ pub struct UserPreferences {
     pub cursor_calibration: CursorCalibration,
     pub active_profile_id: String,
     pub profiles: Vec<ControlProfile>,
+    pub auto_profile_enabled: bool,
+    pub app_profile_rules: Vec<app_profile::AppProfileRule>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -198,6 +202,8 @@ impl Default for UserPreferences {
             cursor_calibration: CursorCalibration::default(),
             active_profile_id: "productivity".into(),
             profiles: ControlProfile::built_ins(),
+            auto_profile_enabled: false,
+            app_profile_rules: Vec::new(),
         }
     }
 }
@@ -302,7 +308,7 @@ impl UserPreferences {
         {
             return Err("The active profile must exist.".to_owned());
         }
-        Ok(())
+        app_profile::validate_app_profile_rules(self)
     }
 }
 

@@ -321,6 +321,16 @@ pub fn maximize_window(handle: &str) -> Result<(), String> {
     platform::show_window(parse_handle(handle)?, platform::ShowAction::Maximize)
 }
 
+pub fn foreground_executable() -> Option<String> {
+    platform::foreground_executable()
+}
+
+pub fn executable_for_window(handle: &str) -> Option<String> {
+    parse_handle(handle)
+        .ok()
+        .and_then(platform::executable_for_window)
+}
+
 fn parse_handle(handle: &str) -> Result<u64, String> {
     u64::from_str_radix(handle, 16).map_err(|_| "The selected window handle is invalid.".to_owned())
 }
@@ -342,8 +352,12 @@ mod platform {
     use super::WindowInfo;
     use aircontrol_core::window::{WindowCandidate, WindowRect, is_supported_window};
     use std::mem::size_of;
+    use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::Foundation::{HWND, LPARAM, RECT};
     use windows_sys::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GW_OWNER, GWL_EXSTYLE, GetForegroundWindow, GetWindow, GetWindowLongPtrW,
         GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindow,
@@ -377,6 +391,40 @@ mod platform {
             return Ok(None);
         }
         Ok(inspect_window(handle))
+    }
+
+    pub fn foreground_executable() -> Option<String> {
+        let hwnd = unsafe { GetForegroundWindow() };
+        executable_for_handle(hwnd)
+    }
+
+    pub fn executable_for_window(handle: u64) -> Option<String> {
+        let hwnd = validated_handle(handle).ok()?;
+        executable_for_handle(hwnd)
+    }
+
+    fn executable_for_handle(hwnd: HWND) -> Option<String> {
+        if hwnd.is_null() || unsafe { IsWindow(hwnd) } == 0 {
+            return None;
+        }
+        let mut process_id = 0u32;
+        if unsafe { GetWindowThreadProcessId(hwnd, &mut process_id) } == 0 || process_id == 0 {
+            return None;
+        }
+        let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, process_id) };
+        if process.is_null() {
+            return None;
+        }
+        let mut path = vec![0u16; 32_768];
+        let mut length = path.len() as u32;
+        let success =
+            unsafe { QueryFullProcessImageNameW(process, 0, path.as_mut_ptr(), &mut length) };
+        unsafe { CloseHandle(process) };
+        if success == 0 || length == 0 || length as usize > path.len() {
+            return None;
+        }
+        let path = String::from_utf16(&path[..length as usize]).ok()?;
+        aircontrol_core::app_profile::normalize_executable_identity(&path).ok()
     }
 
     pub fn focus_window(handle: u64) -> Result<(), String> {
@@ -539,6 +587,14 @@ mod platform {
 
     pub fn foreground_window() -> Result<Option<WindowInfo>, String> {
         Err(ERROR.to_owned())
+    }
+
+    pub fn foreground_executable() -> Option<String> {
+        None
+    }
+
+    pub fn executable_for_window(_handle: u64) -> Option<String> {
+        None
     }
 
     pub fn focus_window(_handle: u64) -> Result<(), String> {

@@ -113,7 +113,7 @@ fn stop_camera(
     if let Some(window) = app.get_webview_window("air-keyboard") {
         let _ = window.hide();
     }
-    set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled);
+    set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled, None);
     camera_result
         .and(cursor_result)
         .and(window_result)
@@ -148,7 +148,8 @@ fn set_cursor_control(
         if snapshot.control_mode != aircontrol_core::ControlMode::Disabled {
             return Err("Stop the active control mode before enabling cursor control.".to_owned());
         }
-        let preferences = settings::load(&app)?;
+        let preferences =
+            preferences_for_activation(&app, window_manager::foreground_executable())?;
         window_control.disable()?;
         cursor.enable(cursor::CursorRuntimeSettings {
             mirrored: preferences.camera_mirrored,
@@ -159,11 +160,16 @@ fn set_cursor_control(
             right_click_enabled: preferences.right_click_enabled,
             calibration: preferences.cursor_calibration,
         })?;
-        set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Cursor);
+        set_control_mode(
+            &runtime,
+            &app,
+            aircontrol_core::ControlMode::Cursor,
+            Some(preferences.active_profile_id.clone()),
+        );
     } else {
         cursor.disable()?;
         window_control.disable()?;
-        set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled);
+        set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled, None);
     }
     Ok(())
 }
@@ -200,7 +206,8 @@ fn set_window_control(
         let selected = handle.as_deref().ok_or_else(|| {
             "Choose an application window before enabling hand movement.".to_owned()
         })?;
-        let preferences = settings::load(&app)?;
+        let preferences =
+            preferences_for_activation(&app, window_manager::executable_for_window(selected))?;
         cursor.disable()?;
         window_control.enable(
             selected,
@@ -208,7 +215,12 @@ fn set_window_control(
             preferences.camera_mirrored,
             preferences.app_switch_enabled,
         )?;
-        set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Window);
+        set_control_mode(
+            &runtime,
+            &app,
+            aircontrol_core::ControlMode::Window,
+            Some(preferences.active_profile_id.clone()),
+        );
     } else {
         window_control.disable()?;
         let current_mode = runtime
@@ -217,7 +229,7 @@ fn set_window_control(
             .map_err(|_| "Runtime status is temporarily unavailable.".to_owned())?
             .control_mode;
         if current_mode == aircontrol_core::ControlMode::Window {
-            set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled);
+            set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled, None);
         }
     }
     Ok(())
@@ -252,7 +264,8 @@ fn set_air_keyboard_control(
         if snapshot.control_mode != aircontrol_core::ControlMode::Disabled {
             return Err("Stop the active control mode before enabling Air Keyboard.".to_owned());
         }
-        let preferences = settings::load(&app)?;
+        let preferences =
+            preferences_for_activation(&app, window_manager::foreground_executable())?;
         cursor.disable()?;
         window_control.disable()?;
         keyboard.reset()?;
@@ -275,7 +288,12 @@ fn set_air_keyboard_control(
             }
             return Err(error);
         }
-        set_control_mode(&runtime, &app, aircontrol_core::ControlMode::AirKeyboard);
+        set_control_mode(
+            &runtime,
+            &app,
+            aircontrol_core::ControlMode::AirKeyboard,
+            Some(preferences.active_profile_id.clone()),
+        );
     } else {
         let cursor_result = cursor.disable();
         let keyboard_result = keyboard.reset();
@@ -288,11 +306,22 @@ fn set_air_keyboard_control(
             .map_err(|_| "Runtime status is temporarily unavailable.".to_owned())?
             .control_mode;
         if current_mode == aircontrol_core::ControlMode::AirKeyboard {
-            set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled);
+            set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled, None);
         }
         cursor_result.and(keyboard_result)?;
     }
     Ok(())
+}
+
+fn preferences_for_activation(
+    app: &AppHandle,
+    executable: Option<String>,
+) -> Result<UserPreferences, String> {
+    let current = settings::load(app)?;
+    Ok(aircontrol_core::app_profile::preferences_for_executable(
+        current.clone(),
+        executable.as_deref(),
+    ))
 }
 
 #[tauri::command]
@@ -385,9 +414,15 @@ fn maximize_control_window(handle: String) -> Result<(), String> {
     window_manager::maximize_window(&handle)
 }
 
-fn set_control_mode(runtime: &RuntimeState, app: &AppHandle, mode: aircontrol_core::ControlMode) {
+fn set_control_mode(
+    runtime: &RuntimeState,
+    app: &AppHandle,
+    mode: aircontrol_core::ControlMode,
+    active_profile_id: Option<String>,
+) {
     if let Ok(mut snapshot) = runtime.snapshot.lock() {
         snapshot.control_mode = mode;
+        snapshot.active_profile_id = active_profile_id;
         snapshot.active_gesture = match mode {
             aircontrol_core::ControlMode::Cursor => aircontrol_core::ActiveGesture::Cursor,
             aircontrol_core::ControlMode::Disabled

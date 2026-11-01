@@ -35,6 +35,8 @@ const initialPreferences: UserPreferences = {
   cursorCalibration: { left: 0, top: 0, right: 1, bottom: 1 },
   activeProfileId: "productivity",
   profiles: BUILT_IN_PROFILES,
+  autoProfileEnabled: false,
+  appProfileRules: [],
 };
 
 export const useRuntimeStore = create<RuntimeStore>((set) => ({

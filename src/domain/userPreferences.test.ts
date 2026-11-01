@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { BUILT_IN_PROFILES, createControlProfile, deleteControlProfile, isValidProfileName, renameControlProfile, restoreControlProfile, withProfileSettings, type UserPreferences } from "./userPreferences";
+import { BUILT_IN_PROFILES, createControlProfile, deleteControlProfile, isValidProfileName, normalizeExecutableIdentity, removeAppProfileRule, renameControlProfile, restoreControlProfile, upsertAppProfileRule, withProfileSettings, type UserPreferences } from "./userPreferences";
 
 const preferences: UserPreferences = {
   ...BUILT_IN_PROFILES[0].settings,
   cursorCalibration: { left: 0, top: 0, right: 1, bottom: 1 },
   activeProfileId: "productivity",
   profiles: BUILT_IN_PROFILES,
+  autoProfileEnabled: false,
+  appProfileRules: [],
 };
 
 describe("control profile helpers", () => {
@@ -49,5 +51,27 @@ describe("control profile helpers", () => {
     const restored = restoreControlProfile(modified, "productivity");
     expect(restored.cursorSensitivity).toBe(BUILT_IN_PROFILES[0].settings.cursorSensitivity);
     expect(() => restoreControlProfile(preferences, "profile-travel")).toThrow(/built-in/);
+  });
+});
+
+
+describe("app-specific profile rules", () => {
+  it("normalizes an executable path to a lowercase Windows filename", () => {
+    expect(normalizeExecutableIdentity("C:\\Apps\\Editor.EXE")).toBe("editor.exe");
+    expect(normalizeExecutableIdentity("notes.txt")).toBeNull();
+  });
+
+  it("upserts mappings by normalized executable and removes them safely", () => {
+    const mapped = upsertAppProfileRule(preferences, "C:\\Apps\\Editor.EXE", "presentation");
+    expect(mapped.appProfileRules).toEqual([{ executable: "editor.exe", profileId: "presentation" }]);
+    const updated = upsertAppProfileRule(mapped, "editor.exe", "custom");
+    expect(updated.appProfileRules).toHaveLength(1);
+    expect(removeAppProfileRule(updated, "EDITOR.exe").appProfileRules).toEqual([]);
+  });
+
+  it("removes mappings when a custom profile is deleted", () => {
+    const withCustom = createControlProfile(preferences, "Travel", "travel");
+    const mapped = upsertAppProfileRule(withCustom, "travel.exe", "travel");
+    expect(deleteControlProfile(mapped, "travel").appProfileRules).toEqual([]);
   });
 });
