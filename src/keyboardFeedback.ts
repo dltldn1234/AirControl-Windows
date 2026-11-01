@@ -38,6 +38,6 @@ export function reduceKeyboardFeedback(
         ? state
         : { ...state, shiftArmed: false };
     case "modeStopped":
-      return INITIAL_KEYBOARD_FEEDBACK;
+      return state.shiftArmed ? { ...state, shiftArmed: false } : state;
   }
 }

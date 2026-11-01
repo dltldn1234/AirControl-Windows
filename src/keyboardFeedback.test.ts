@@ -63,12 +63,12 @@ describe("Air Keyboard feedback", () => {
     ).toEqual({ legend: "korean", shiftArmed: true });
   });
 
-  it("resets AirControl feedback when keyboard mode stops", () => {
+  it("clears one-shot Shift but preserves key labels when keyboard mode stops", () => {
     expect(
       reduceKeyboardFeedback(
         { legend: "korean", shiftArmed: true },
         { type: "modeStopped" },
       ),
-    ).toEqual(INITIAL_KEYBOARD_FEEDBACK);
+    ).toEqual({ legend: "korean", shiftArmed: false });
   });
 });

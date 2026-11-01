@@ -59,8 +59,7 @@ impl KeyboardSession {
     }
 
     pub fn reset(&mut self) {
-        self.shift_armed = false;
-        self.layout = KeyboardLayout::English;
+        self.reset_modifiers();
     }
 
     pub fn reset_modifiers(&mut self) {
@@ -269,6 +268,18 @@ mod tests {
         keyboard.press("shift").unwrap();
 
         keyboard.reset_modifiers();
+
+        assert!(!keyboard.shift_armed());
+        assert_eq!(keyboard.layout(), KeyboardLayout::Korean);
+    }
+
+    #[test]
+    fn session_reset_clears_shift_but_preserves_the_selected_key_legend() {
+        let mut keyboard = KeyboardSession::default();
+        keyboard.press("layout").unwrap();
+        keyboard.press("shift").unwrap();
+
+        keyboard.reset();
 
         assert!(!keyboard.shift_armed());
         assert_eq!(keyboard.layout(), KeyboardLayout::Korean);
