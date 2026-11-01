@@ -2,7 +2,7 @@
 
 AirControl is a local-first Windows desktop application for controlling a PC with hand gestures. The Windows edition is built with Tauri 2, a Rust core, and a React + TypeScript interface.
 
-> **Development status:** the desktop shell, runtime status bridge, local preference storage, dashboard, opt-in native camera enumeration/preview, local ONNX palm plus 21-point hand landmark inference, cursor/mouse gestures, and window control are implemented in the development history. Air Keyboard is implemented in the Issue #13 work and is awaiting Windows CI and Windows PC checks. Gesture-driven app switching and real Windows hardware behavior still need validation.
+> **Development status:** the desktop shell, runtime status bridge, local preference storage, dashboard, opt-in native camera enumeration/preview, local ONNX palm plus 21-point hand landmark inference, cursor/mouse gestures, window control, Air Keyboard, gesture-driven app switching, and cursor calibration are implemented. Named control profiles are in progress in Issue #23. Camera, keyboard IME, window activation, and physical cursor behavior still need Windows PC validation.
 
 ## Technology
 
@@ -47,6 +47,7 @@ npm run test:e2e
 - `e2e`: browser-level UI checks; these do not replace testing the Windows WebView2 app.
 
 React does not generate operating-system input. Cursor, window, and keyboard control belongs in Rust services behind explicit readiness and user activation gates.
+Named control profiles and built-in presets are stored locally; see [control profiles](docs/CONTROL_PROFILES.md).
 
 ## Privacy and safety
 
@@ -56,7 +57,7 @@ React does not generate operating-system input. Cursor, window, and keyboard con
 - Camera access is requested only when the user searches for devices; capture is stopped when the user stops the preview or the app exits.
 - Camera frames are resized and kept in memory for the live preview. They are not saved or sent to a server.
 - ONNX model weights are bundled for local processing; see [model notices](docs/MODEL_NOTICES.md). Palm detection and 21-point landmark inference run locally on sampled camera preview frames.
-- System input commands are not implemented yet.
+- Native system input is gated behind explicit control activation and Windows desktop permissions; browser preview never sends system input.
 
 ## License
 

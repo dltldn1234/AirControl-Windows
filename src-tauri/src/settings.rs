@@ -11,9 +11,12 @@ pub fn load(app: &AppHandle) -> Result<UserPreferences, String> {
 
 fn load_from_path(path: &std::path::Path) -> Result<UserPreferences, String> {
     match fs::read(path) {
-        Ok(contents) => serde_json::from_slice::<UserPreferences>(&contents)
-            .map(UserPreferences::normalized)
-            .map_err(|error| format!("Saved preferences could not be read: {error}")),
+        Ok(contents) => {
+            let preferences = serde_json::from_slice::<UserPreferences>(&contents)
+                .map_err(|error| format!("Saved preferences could not be read: {error}"))?;
+            preferences.validate_profiles()?;
+            Ok(preferences.normalized())
+        }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             Ok(UserPreferences::default())
         }
@@ -30,6 +33,7 @@ fn save_to_path(
     path: &std::path::Path,
     preferences: UserPreferences,
 ) -> Result<UserPreferences, String> {
+    preferences.validate_profiles()?;
     let parent = path
         .parent()
         .ok_or_else(|| "Preferences directory is unavailable.".to_owned())?;
@@ -89,9 +93,10 @@ mod tests {
         };
         let saved = save_to_path(&path, requested.clone()).expect("save preferences");
         let loaded = load_from_path(&path).expect("load saved preferences");
+        let expected = requested.normalized();
 
-        assert_eq!(saved, requested);
-        assert_eq!(loaded, requested);
+        assert_eq!(saved, expected);
+        assert_eq!(loaded, expected);
     }
 
     #[test]
@@ -113,6 +118,10 @@ mod tests {
             parsed.cursor_calibration,
             aircontrol_core::cursor::CursorCalibration::default()
         );
+        let migrated = parsed.normalized();
+        assert_eq!(migrated.active_profile_id, "productivity");
+        assert_eq!(migrated.profiles.len(), 3);
+        assert_eq!(migrated.profiles[0].settings.cursor_sensitivity, 1.4);
     }
 
     #[test]
@@ -126,5 +135,32 @@ mod tests {
             std::fs::read(path).expect("preserved file"),
             b"not valid json"
         );
+    }
+
+    #[test]
+    fn invalid_profiles_do_not_replace_the_last_saved_preferences() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let path = directory.path().join("preferences.json");
+        let existing = UserPreferences::default();
+        save_to_path(&path, existing.clone()).expect("initial save");
+        let mut invalid = existing;
+        invalid.profiles[0].name = invalid.profiles[1].name.clone();
+
+        assert!(save_to_path(&path, invalid).is_err());
+        assert_eq!(
+            load_from_path(&path).expect("preserved settings"),
+            UserPreferences::default()
+        );
+    }
+
+    #[test]
+    fn malformed_saved_profiles_are_reported_without_overwriting_the_file() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let path = directory.path().join("preferences.json");
+        let malformed = br#"{"profiles":[]}"#;
+        std::fs::write(&path, malformed).expect("write malformed profile fixture");
+
+        assert!(load_from_path(&path).is_err());
+        assert_eq!(std::fs::read(path).expect("preserved file"), malformed);
     }
 }

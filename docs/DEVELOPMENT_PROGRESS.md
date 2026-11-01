@@ -1,12 +1,21 @@
 # Development Progress
 
-## Current state (2026-11-01, Issue #21)
+## Current state (2026-11-01, Issue #23)
 
-- Directive baseline for the 201-commit goal: 71 commits on `main` at `bb17403`; current `main` has 82 commits at `83e32af`, leaving 119 meaningful commits to reach 201. No filler commits will be created.
-- Issue: [#21 — Add persistent cursor movement calibration](https://github.com/dltldn1234/AirControl-Windows/issues/21). PR #22 is open from `21-feat/cursor-calibration`; Windows CI is pending. The branch has ten commits on the 82-commit baseline.
+- Current `origin/main`: 94 commits at `c9cc32c`; 107 meaningful commits remain to reach the user's 201-commit target. No filler commits will be created.
+- Issue: [#23 — Add named control profiles and built-in presets](https://github.com/dltldn1234/AirControl-Windows/issues/23). Branch: `23-feat/control-profiles`, preserving 15 feature commits and merging the new main without rewriting the published branch. PR creation follows final verification.
+- Added built-in Productivity, Presentation, and Custom presets; personal profile create, rename, delete, selection, and restore; profile validation and legacy settings migration; atomic local persistence; and a settings UI. Profile changes do not start camera or system input.
+- Integrated-tree validation: Rust workspace 91 tests passed, rustfmt and Clippy with warnings denied passed; frontend typecheck, 26 Vitest tests, production build, and 7 Playwright tests passed.
+- Issue #21 / PR #22 cursor calibration merged normally at `c9cc32c` after Windows CI run `41289630039` passed, including the Windows executable build.
+- Physical cursor calibration, profile-driven behavior, camera, keyboard IME, and window activation remain Windows PC checks.
+- Next: commit the synchronization merge, open PR #23, and merge only after its Windows CI succeeds.
+
+## Previous state (2026-11-01, Issue #21)
+
+- Issue: [#21 — Add persistent cursor movement calibration](https://github.com/dltldn1234/AirControl-Windows/issues/21); PR #22 merged normally at `c9cc32c` after Windows CI run [41289630039](https://github.com/dltldn1234/AirControl-Windows/actions/runs/41289630039) passed.
 - Added validated normalized cursor bounds (minimum 15% span per axis), settings persistence with full-frame legacy defaults, cursor and Air Keyboard hover mapping, bounded edge controls, and a reset action.
-- Local verification after rebase: Rust workspace 85 tests passed, rustfmt and Clippy with warnings denied passed; frontend typecheck, 20 Vitest tests, Vite production build, and 6 Playwright tests passed.
-- Physical hand positioning/cursor comfort remain to be checked. Next: wait for PR #22 Windows CI, merge normally if it passes, and update the `main` commit count.
+- Local verification before merge: Rust workspace 85 tests passed, rustfmt and Clippy with warnings denied passed; frontend typecheck, 20 Vitest tests, Vite production build, and 6 Playwright tests passed.
+- Physical hand positioning and cursor comfort remain to be checked on a Windows PC. Issue #21 contributed eleven branch commits on the 82-commit baseline; the merge brought `main` to 94 commits.
 
 ## Previous state (2026-11-01, Issue #19)
 
