@@ -1,3 +1,4 @@
+use crate::cursor::CursorController;
 use crate::hand_tracking::HandTrackingModels;
 use aircontrol_core::{CameraState, RuntimeSnapshot};
 use base64::Engine;
@@ -78,6 +79,8 @@ impl CameraService {
         app: AppHandle,
         runtime: Arc<Mutex<RuntimeSnapshot>>,
         device_id: String,
+        cursor: CursorController,
+        pinch_sensitivity: f32,
     ) -> Result<(), String> {
         let index = decode_camera_index(&device_id)?;
         let mut worker = self
@@ -103,7 +106,15 @@ impl CameraService {
         let thread = thread::Builder::new()
             .name("aircontrol-camera".to_owned())
             .spawn(move || {
-                capture_loop(app, runtime, index, worker_stop, worker_finished);
+                capture_loop(
+                    app,
+                    runtime,
+                    index,
+                    worker_stop,
+                    worker_finished,
+                    cursor,
+                    pinch_sensitivity,
+                );
             })
             .map_err(|error| format!("Camera worker could not be started: {error}"))?;
 
@@ -162,6 +173,8 @@ fn capture_loop(
     index: CameraIndex,
     stop: Arc<AtomicBool>,
     finished: Arc<AtomicBool>,
+    cursor: CursorController,
+    pinch_sensitivity: f32,
 ) {
     set_camera_state(&runtime, &app, CameraState::Starting, None);
     set_tracking_state(
@@ -201,13 +214,13 @@ fn capture_loop(
     let mut camera = match Camera::new(index, requested) {
         Ok(camera) => camera,
         Err(error) => {
-            fail_worker(&runtime, &app, &finished, error.to_string());
+            fail_worker(&runtime, &app, &finished, &cursor, error.to_string());
             return;
         }
     };
 
     if let Err(error) = camera.open_stream() {
-        fail_worker(&runtime, &app, &finished, error.to_string());
+        fail_worker(&runtime, &app, &finished, &cursor, error.to_string());
         return;
     }
 
@@ -218,7 +231,7 @@ fn capture_loop(
         let frame = match camera.frame() {
             Ok(frame) => frame,
             Err(error) => {
-                fail_worker(&runtime, &app, &finished, error.to_string());
+                fail_worker(&runtime, &app, &finished, &cursor, error.to_string());
                 return;
             }
         };
@@ -231,16 +244,36 @@ fn capture_loop(
                         .map(|models| models.detect_palms(&image));
                     let palms = match inference {
                         Some(Ok(palms)) => {
-                            let state = if palms.is_empty() {
+                            let has_pose = palms.iter().any(|palm| palm.finger_landmarks.is_some());
+                            let state = if has_pose {
+                                aircontrol_core::HandTrackingState::Detected
+                            } else if palms.is_empty() {
                                 aircontrol_core::HandTrackingState::Lost
                             } else {
-                                aircontrol_core::HandTrackingState::Detected
+                                aircontrol_core::HandTrackingState::PalmDetected
                             };
                             set_tracking_state(&runtime, &app, state, None);
+                            let landmarks = palms.iter().find_map(|palm| palm.finger_landmarks);
+                            if let Err(error) = cursor.update_hand_landmarks(
+                                landmarks,
+                                [image.width(), image.height()],
+                                pinch_sensitivity,
+                            ) {
+                                log::warn!("Cursor control stopped after an input error: {error}");
+                                let _ = cursor.disable();
+                                set_control_disabled(&runtime, &app);
+                            }
                             palms
                         }
                         Some(Err(error)) => {
                             hand_models = None;
+                            let _ = cursor.update_hand_landmarks(
+                                None,
+                                [image.width(), image.height()],
+                                pinch_sensitivity,
+                            );
+                            let _ = cursor.disable();
+                            set_control_disabled(&runtime, &app);
                             set_tracking_state(
                                 &runtime,
                                 &app,
@@ -250,7 +283,14 @@ fn capture_loop(
                             log::error!("Hand inference stopped after a model error: {error}");
                             Vec::new()
                         }
-                        None => Vec::new(),
+                        None => {
+                            let _ = cursor.update_hand_landmarks(
+                                None,
+                                [image.width(), image.height()],
+                                pinch_sensitivity,
+                            );
+                            Vec::new()
+                        }
                     };
                     if let Err(error) = emit_preview(&app, &image, &palms) {
                         log::warn!("Camera preview frame could not be encoded: {error}");
@@ -263,6 +303,8 @@ fn capture_loop(
     }
 
     let _ = camera.stop_stream();
+    let _ = cursor.disable();
+    set_control_disabled(&runtime, &app);
     set_camera_state(&runtime, &app, CameraState::Stopped, None);
     finished.store(true, Ordering::Release);
 }
@@ -292,10 +334,21 @@ fn fail_worker(
     runtime: &Arc<Mutex<RuntimeSnapshot>>,
     app: &AppHandle,
     finished: &AtomicBool,
+    cursor: &CursorController,
     message: String,
 ) {
+    let _ = cursor.disable();
+    set_control_disabled(runtime, app);
     set_camera_state(runtime, app, CameraState::Error, Some(message));
     finished.store(true, Ordering::Release);
+}
+
+fn set_control_disabled(runtime: &Arc<Mutex<RuntimeSnapshot>>, app: &AppHandle) {
+    if let Ok(mut snapshot) = runtime.lock() {
+        snapshot.control_mode = aircontrol_core::ControlMode::Disabled;
+        snapshot.active_gesture = aircontrol_core::ActiveGesture::None;
+        let _ = app.emit("runtime-status", snapshot.clone());
+    }
 }
 
 fn set_camera_state(

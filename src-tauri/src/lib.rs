@@ -5,6 +5,7 @@ use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_log::{Target, TargetKind};
 
 mod camera;
+mod cursor;
 mod hand_tracking;
 mod settings;
 
@@ -74,9 +75,17 @@ fn start_camera(
     app: AppHandle,
     runtime: State<'_, RuntimeState>,
     camera_service: State<'_, CameraService>,
+    cursor: State<'_, cursor::CursorController>,
     device_id: String,
 ) -> Result<(), String> {
-    camera_service.start(app, runtime.snapshot.clone(), device_id)
+    let preferences = settings::load(&app)?;
+    camera_service.start(
+        app,
+        runtime.snapshot.clone(),
+        device_id,
+        cursor.inner().clone(),
+        preferences.pinch_sensitivity,
+    )
 }
 
 #[tauri::command]
@@ -84,8 +93,58 @@ fn stop_camera(
     app: AppHandle,
     runtime: State<'_, RuntimeState>,
     camera_service: State<'_, CameraService>,
+    cursor: State<'_, cursor::CursorController>,
 ) -> Result<(), String> {
-    camera_service.stop(&runtime.snapshot, &app)
+    let result = camera_service.stop(&runtime.snapshot, &app);
+    cursor.disable()?;
+    set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled);
+    result
+}
+
+#[tauri::command]
+fn set_cursor_control(
+    enabled: bool,
+    app: AppHandle,
+    runtime: State<'_, RuntimeState>,
+    cursor: State<'_, cursor::CursorController>,
+) -> Result<(), String> {
+    if enabled {
+        let snapshot = runtime
+            .snapshot
+            .lock()
+            .map_err(|_| "Runtime status is temporarily unavailable.".to_owned())?
+            .clone();
+        let readiness = aircontrol_core::ControlReadiness {
+            camera_running: snapshot.camera == aircontrol_core::CameraState::Running,
+            hand_pose_detected: snapshot.hand_tracking
+                == aircontrol_core::HandTrackingState::Detected,
+        };
+        if !readiness.can_enable() {
+            return Err(
+                "Start the camera and wait for all hand landmarks before enabling cursor control."
+                    .to_owned(),
+            );
+        }
+        let preferences = settings::load(&app)?;
+        cursor.enable(preferences.camera_mirrored, preferences.cursor_sensitivity)?;
+        set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Cursor);
+    } else {
+        cursor.disable()?;
+        set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled);
+    }
+    Ok(())
+}
+
+fn set_control_mode(runtime: &RuntimeState, app: &AppHandle, mode: aircontrol_core::ControlMode) {
+    if let Ok(mut snapshot) = runtime.snapshot.lock() {
+        snapshot.control_mode = mode;
+        snapshot.active_gesture = if mode == aircontrol_core::ControlMode::Disabled {
+            aircontrol_core::ActiveGesture::None
+        } else {
+            aircontrol_core::ActiveGesture::Cursor
+        };
+        let _ = app.emit("runtime-status", snapshot.clone());
+    }
 }
 
 fn set_camera_state(
@@ -115,6 +174,7 @@ pub fn run() {
         )
         .manage(RuntimeState::default())
         .manage(CameraService::default())
+        .manage(cursor::CursorController::default())
         .setup(|_app| {
             log::info!("AirControl started with system controls disabled");
             Ok(())
@@ -125,7 +185,8 @@ pub fn run() {
             save_preferences,
             list_cameras,
             start_camera,
-            stop_camera
+            stop_camera,
+            set_cursor_control
         ])
         .run(tauri::generate_context!())
         .expect("failed to launch AirControl");
