@@ -27,6 +27,16 @@ test("window controls stay unavailable in browser preview mode", async ({ page }
   await expect(page.getByRole("button", { name: "Start hand move" })).toBeDisabled();
 });
 
+test("gesture app switching is an explicit desktop-only preference", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings" }).click();
+
+  const appSwitch = page.getByRole("checkbox", { name: "Gesture app switching" });
+  await expect(appSwitch).not.toBeChecked();
+  await expect(appSwitch).toBeDisabled();
+  await expect(page.getByText(/horizontal three-finger swipe/)).toBeVisible();
+});
+
 test("Air Keyboard preview exposes the layout without sending system key events", async ({ page }) => {
   await page.goto("/?surface=keyboard");
 
