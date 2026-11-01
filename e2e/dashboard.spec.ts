@@ -15,6 +15,6 @@ test("camera page clearly separates native capture from browser preview", async 
   await expect(page.getByRole("heading", { level: 1, name: "Camera & tracking" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Camera source" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Find cameras" })).toBeDisabled();
-  await expect(page.getByText("Hand landmark inference is not active.")).toBeVisible();
+  await expect(page.getByText("Local hand inference is waiting for a camera frame.")).toBeVisible();
   await expect(page.getByText("Open AirControl as a desktop app to access its camera service.")).toBeVisible();
 });

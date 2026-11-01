@@ -40,7 +40,7 @@ export function trackingLabel(state: HandTrackingState): string {
     waiting: "Waiting",
     modelLoading: "Loading model",
     modelReady: "Model loaded",
-    detected: "Hand detected",
+    detected: "Palm detected",
     lost: "Tracking lost",
     error: "Model error",
   };

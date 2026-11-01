@@ -30,6 +30,15 @@ import type { CameraDevice, CameraFrame, CameraStatusEvent, HandTrackingStatusEv
 import type { UserPreferences } from "./domain/userPreferences";
 import { cameraLabel, gestureLabel, trackingLabel } from "./domain/runtimeStatus";
 
+const HAND_CONNECTIONS: [number, number][] = [
+  [0, 1], [1, 2], [2, 3], [3, 4],
+  [0, 5], [5, 6], [6, 7], [7, 8],
+  [0, 9], [9, 10], [10, 11], [11, 12],
+  [0, 13], [13, 14], [14, 15], [15, 16],
+  [0, 17], [17, 18], [18, 19], [19, 20],
+  [5, 9], [9, 13], [13, 17],
+];
+
 const navigation = [
   { label: "Overview", icon: Activity, group: "Workspace" },
   { label: "Camera & tracking", icon: Camera, group: "Workspace" },
@@ -125,7 +134,7 @@ function Overview({ status }: { status: RuntimeSnapshot | null }) {
 
       <section className="status-grid" aria-label="System status">
         <StatusCard icon={Camera} label="CAMERA" value={cameraLabel(camera)} detail={camera === "running" ? "Capture is active" : "Waiting for camera service"} />
-        <StatusCard icon={Hand} label="HAND TRACKING" value={trackingLabel(tracking)} detail={tracking === "detected" ? "Landmarks detected" : "No hand data received"} />
+        <StatusCard icon={Hand} label="HAND TRACKING" value={trackingLabel(tracking)} detail={tracking === "detected" ? "Palm found; pose inference is active" : "No hand landmarks received"} />
         <StatusCard icon={MousePointer2} label="CONTROL MODE" value={mode === "disabled" ? "Off" : mode} detail={mode === "disabled" ? "No system input is being sent" : "Explicitly enabled"} />
         <StatusCard icon={WandSparkles} label="GESTURE" value={gestureLabel(gesture)} detail={fps == null ? "FPS unavailable" : `${fps.toFixed(0)} frames per second`} />
       </section>
@@ -246,6 +255,7 @@ function CameraSection({
       <div className="camera-preview-column">
         <div className={`camera-stage ${frame ? "has-frame" : ""}`}>
           {frame ? <img className="camera-frame" src={`data:image/jpeg;base64,${frame.jpegBase64}`} alt="Live camera preview" /> : <div className="camera-empty"><span><Video size={25} aria-hidden="true" /></span><strong>{cameraState === "running" ? "Waiting for the first frame" : "Camera preview is off"}</strong><small>Frames are processed and displayed locally.</small></div>}
+          {frame && frame.palms.length > 0 && <svg className="camera-overlay" viewBox={`0 0 ${frame.width} ${frame.height}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label="Detected hand regions and finger-joint landmarks"><g transform={`translate(${frame.width} 0) scale(-1 1)`}>{frame.palms.map((palm, palmIndex) => <g key={palmIndex}><rect x={palm.bounds[0]} y={palm.bounds[1]} width={palm.bounds[2] - palm.bounds[0]} height={palm.bounds[3] - palm.bounds[1]} rx="3" /><text x={palm.bounds[0] + 4} y={Math.max(12, palm.bounds[1] - 5)}>{Math.round(palm.confidence * 100)}%</text>{palm.fingerLandmarks ? <g className="finger-landmarks">{HAND_CONNECTIONS.map(([from, to]) => <line key={`${from}-${to}`} x1={palm.fingerLandmarks?.[from][0]} y1={palm.fingerLandmarks?.[from][1]} x2={palm.fingerLandmarks?.[to][0]} y2={palm.fingerLandmarks?.[to][1]} />)}{palm.fingerLandmarks.map(([x, y], index) => <circle key={index} cx={x} cy={y} r="3" />)}</g> : palm.landmarks.map(([x, y], index) => <circle key={index} cx={x} cy={y} r="4" />)}</g>)}</g></svg>}
           <span className={`camera-live-badge ${cameraState === "running" ? "active" : ""}`}><span />{cameraState === "running" ? "LIVE" : cameraState === "starting" ? "STARTING" : "OFF"}</span>
           {frame && <span className="camera-resolution">{frame.width} × {frame.height}</span>}
         </div>
@@ -253,7 +263,7 @@ function CameraSection({
       </div>
       <div className="camera-controls">
         <div className="camera-controls-heading"><div><h2>Camera source</h2><p>Choose a local camera to see a live preview.</p></div><span className={`camera-state-pill ${cameraState}`}>{cameraLabel(cameraState)}</span></div>
-        <div className="camera-tracking-status" role="status"><strong>Hand tracking</strong><span>{trackingLabel(handTrackingState)}</span><small>{handTrackingState === "modelReady" ? "Models are loaded locally; live landmark inference is still in development." : "Hand landmark inference is not active."}</small></div>
+        <div className="camera-tracking-status" role="status"><strong>Hand tracking</strong><span>{trackingLabel(handTrackingState)}</span><small>{handTrackingState === "modelReady" ? "Models loaded locally; waiting for the first camera frame." : handTrackingState === "detected" ? frame?.palms.some((palm) => palm.fingerLandmarks?.length === 21) ? "Palm and all 21 finger-joint landmarks are visible." : "Palm found; waiting for a confident 21-point pose." : handTrackingState === "lost" ? "No palm is currently visible; the detector keeps searching." : handTrackingState === "error" ? "Hand inference failed. Check the runtime error and restart camera capture." : "Local hand inference is waiting for a camera frame."}</small></div>
         <label className="camera-select-label" htmlFor="camera-device">Available cameras</label>
         <select id="camera-device" value={selectedCamera} disabled={!canUseCamera || cameras.length === 0 || cameraState === "running"} onChange={(event) => setSelectedCamera(event.currentTarget.value)}>
           {cameras.length === 0 ? <option value="">Search for cameras first</option> : cameras.map((camera) => <option key={camera.id} value={camera.id}>{camera.name}</option>)}
