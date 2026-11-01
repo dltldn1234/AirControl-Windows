@@ -54,6 +54,7 @@ pub enum ActiveGesture {
     Scroll,
     RightClick,
     WindowMove,
+    WindowResize,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]

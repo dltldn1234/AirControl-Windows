@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+const MINIMUM_TWO_HAND_DISTANCE: f32 = 0.08;
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowRect {
@@ -36,6 +38,66 @@ pub struct WindowMoveUpdate {
 pub struct WindowMoveRecognizer {
     active: bool,
     previous_position: Option<[f32; 2]>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct WindowResizeUpdate {
+    pub active: bool,
+    pub scale: Option<f32>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct WindowResizeRecognizer {
+    initial_distance: Option<f32>,
+}
+
+impl WindowResizeRecognizer {
+    pub fn is_active(self) -> bool {
+        self.initial_distance.is_some()
+    }
+
+    pub fn reset(&mut self) {
+        self.initial_distance = None;
+    }
+
+    pub fn update(
+        &mut self,
+        positions: Option<[[f32; 2]; 2]>,
+        sensitivity: f32,
+    ) -> WindowResizeUpdate {
+        let Some(positions) = positions.filter(|points| {
+            points
+                .iter()
+                .flatten()
+                .all(|coordinate| coordinate.is_finite())
+        }) else {
+            self.reset();
+            return WindowResizeUpdate::default();
+        };
+        let distance = (positions[0][0] - positions[1][0]).hypot(positions[0][1] - positions[1][1]);
+        if !distance.is_finite() || distance <= MINIMUM_TWO_HAND_DISTANCE {
+            self.reset();
+            return WindowResizeUpdate::default();
+        }
+        let Some(initial_distance) = self.initial_distance else {
+            self.initial_distance = Some(distance);
+            return WindowResizeUpdate {
+                active: true,
+                scale: None,
+            };
+        };
+        let sensitivity = if sensitivity.is_finite() {
+            sensitivity.clamp(0.4, 2.0)
+        } else {
+            1.0
+        };
+        let relative_distance = distance / initial_distance;
+        let scale = (1.0 + (relative_distance - 1.0) * sensitivity).clamp(0.5, 2.0);
+        WindowResizeUpdate {
+            active: true,
+            scale: (scale - 1.0).abs().ge(&0.025).then_some(scale),
+        }
+    }
 }
 
 impl WindowMoveRecognizer {
@@ -152,8 +214,8 @@ pub fn resize_window(rect: WindowRect, scale: f32, limits: WindowSizeLimits) -> 
 #[cfg(test)]
 mod tests {
     use super::{
-        WindowCandidate, WindowMoveRecognizer, WindowRect, WindowSizeLimits, is_supported_window,
-        move_window, resize_window,
+        WindowCandidate, WindowMoveRecognizer, WindowRect, WindowResizeRecognizer,
+        WindowSizeLimits, is_supported_window, move_window, resize_window,
     };
 
     #[test]
@@ -298,5 +360,48 @@ mod tests {
                 .update(Some(0.1), Some([f32::NAN, 0.2]), 1.0)
                 .active
         );
+    }
+
+    #[test]
+    fn two_hand_resize_tracks_relative_distance_and_clamps_scale() {
+        let mut recognizer = WindowResizeRecognizer::default();
+        let initial = recognizer.update(Some([[0.2, 0.5], [0.8, 0.5]]), 1.0);
+        assert!(initial.active);
+        assert_eq!(initial.scale, None);
+
+        let enlarged = recognizer.update(Some([[0.1, 0.5], [0.9, 0.5]]), 1.0);
+        assert!(enlarged.active);
+        assert!((enlarged.scale.expect("distance increased") - 1.3333333).abs() < 0.00001);
+
+        let maximum = recognizer.update(Some([[0.0, 0.5], [1.0, 0.5]]), 2.0);
+        assert_eq!(maximum.scale, Some(2.0));
+    }
+
+    #[test]
+    fn losing_a_resize_hand_resets_the_baseline_before_reacquisition() {
+        let mut recognizer = WindowResizeRecognizer::default();
+        recognizer.update(Some([[0.2, 0.5], [0.8, 0.5]]), 1.0);
+        assert!(!recognizer.update(None, 1.0).active);
+        assert!(!recognizer.is_active());
+        assert_eq!(
+            recognizer.update(Some([[0.3, 0.5], [0.7, 0.5]]), 1.0).scale,
+            None
+        );
+    }
+
+    #[test]
+    fn close_or_invalid_two_hand_points_do_not_start_resize() {
+        let mut recognizer = WindowResizeRecognizer::default();
+        assert!(
+            !recognizer
+                .update(Some([[0.50, 0.50], [0.55, 0.50]]), 1.0)
+                .active
+        );
+        assert!(
+            !recognizer
+                .update(Some([[0.2, 0.5], [f32::NAN, 0.5]]), 1.0)
+                .active
+        );
+        assert!(!recognizer.is_active());
     }
 }
