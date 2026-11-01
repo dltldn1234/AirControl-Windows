@@ -3,6 +3,7 @@ import { create } from "zustand";
 import type { CameraDevice } from "../domain/camera";
 import type { CameraState, HandTrackingState, RuntimeSnapshot } from "../domain/runtimeStatus";
 import { BUILT_IN_PROFILES, type UserPreferences } from "../domain/userPreferences";
+import { DEFAULT_GESTURE_STUDIO } from "../domain/gestureStudio";
 
 type RuntimeConnection = "preview" | "connected" | "error";
 
@@ -17,6 +18,7 @@ interface RuntimeStore {
   startCamera: (deviceId: string) => Promise<boolean>;
   stopCamera: () => Promise<boolean>;
   setCursorControl: (enabled: boolean) => Promise<boolean>;
+  setGestureTestMode: (enabled: boolean) => Promise<boolean>;
   setRuntimeStatus: (status: RuntimeSnapshot) => void;
   setCameraState: (camera: CameraState) => void;
   setHandTrackingState: (state: HandTrackingState) => void;
@@ -37,6 +39,7 @@ const initialPreferences: UserPreferences = {
   profiles: BUILT_IN_PROFILES,
   autoProfileEnabled: false,
   appProfileRules: [],
+  gestureStudio: DEFAULT_GESTURE_STUDIO,
 };
 
 export const useRuntimeStore = create<RuntimeStore>((set) => ({
@@ -110,6 +113,17 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
     if (!isTauri()) return false;
     try {
       await invoke("set_cursor_control", { enabled });
+      set({ error: null });
+      return true;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : String(error) });
+      return false;
+    }
+  },
+  setGestureTestMode: async (enabled) => {
+    if (!isTauri()) return false;
+    try {
+      await invoke("set_gesture_test_mode", { enabled });
       set({ error: null });
       return true;
     } catch (error) {
