@@ -1,5 +1,6 @@
 use aircontrol_core::cursor::{
-    VirtualDesktop, apply_cursor_sensitivity, map_normalized_cursor, normalize_absolute_cursor,
+    CursorCalibration, VirtualDesktop, apply_cursor_calibration, apply_cursor_sensitivity,
+    map_normalized_cursor, normalize_absolute_cursor,
 };
 use aircontrol_core::filter::OneEuroCursorFilter;
 use aircontrol_core::gesture::{
@@ -24,6 +25,7 @@ struct CursorState {
     keyboard_bounds: Option<KeyboardBounds>,
     mirrored: bool,
     sensitivity: f32,
+    calibration: CursorCalibration,
     smoothing: f32,
     left_button_down: bool,
     right_button_down: bool,
@@ -38,39 +40,42 @@ struct CursorState {
     keyboard_tap: KeyboardTapRecognizer,
 }
 
+pub struct CursorRuntimeSettings {
+    pub mirrored: bool,
+    pub sensitivity: f32,
+    pub smoothing: f32,
+    pub scroll_sensitivity: f32,
+    pub reverse_scroll: bool,
+    pub right_click_enabled: bool,
+    pub calibration: CursorCalibration,
+}
+
 impl CursorController {
-    pub fn enable(
-        &self,
-        mirrored: bool,
-        sensitivity: f32,
-        smoothing: f32,
-        scroll_sensitivity: f32,
-        reverse_scroll: bool,
-        right_click_enabled: bool,
-    ) -> Result<(), String> {
+    pub fn enable(&self, settings: CursorRuntimeSettings) -> Result<(), String> {
         let _ = current_virtual_desktop()?;
         let mut state = self
             .state
             .lock()
             .map_err(|_| "Cursor control is temporarily unavailable.".to_owned())?;
-        state.mirrored = mirrored;
-        state.sensitivity = if sensitivity.is_finite() {
-            sensitivity.clamp(0.5, 2.0)
+        state.mirrored = settings.mirrored;
+        state.sensitivity = if settings.sensitivity.is_finite() {
+            settings.sensitivity.clamp(0.5, 2.0)
         } else {
             1.0
         };
-        state.smoothing = if smoothing.is_finite() {
-            smoothing.clamp(0.0, 0.9)
+        state.smoothing = if settings.smoothing.is_finite() {
+            settings.smoothing.clamp(0.0, 0.9)
         } else {
             0.4
         };
-        state.scroll_sensitivity = if scroll_sensitivity.is_finite() {
-            scroll_sensitivity.clamp(0.4, 3.0)
+        state.scroll_sensitivity = if settings.scroll_sensitivity.is_finite() {
+            settings.scroll_sensitivity.clamp(0.4, 3.0)
         } else {
             1.0
         };
-        state.reverse_scroll = reverse_scroll;
-        state.right_click_enabled = right_click_enabled;
+        state.reverse_scroll = settings.reverse_scroll;
+        state.right_click_enabled = settings.right_click_enabled;
+        state.calibration = settings.calibration.normalized();
         let _ = state.pinch.reset();
         state.right_pinch.reset();
         state.filter.reset();
@@ -165,6 +170,9 @@ impl CursorController {
             return release_for_tracking_loss(&mut state);
         };
         let Some(point) = normalized_landmark(landmarks[8], frame_size) else {
+            return release_for_tracking_loss(&mut state);
+        };
+        let Some(point) = apply_cursor_calibration(point, state.calibration) else {
             return release_for_tracking_loss(&mut state);
         };
 
