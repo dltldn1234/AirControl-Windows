@@ -9,7 +9,7 @@
 - English/Korean is labeled as a keycap legend selection. UI copy states that AirControl does not inspect the foreground application's IME state and directs users to that application's indicator.
 - Local verification: Rust workspace 68 tests passed, rustfmt passed, Clippy with warnings denied passed; frontend typecheck passed, Vitest 16 passed, Vite production build passed, Playwright Chromium 4 passed.
 - Windows CI and manual Windows overlay/focus, global Caps Lock, and Korean IME behavior remain to be verified.
-- This branch has 4 implementation/test commits plus this progress update; the main baseline is 59 commits.
+- This branch has 3 implementation/test commits and 3 progress-documentation commits (6 total) on the 59-commit main baseline.
 
 ## Current state (2026-11-01, Issue #13)
 
