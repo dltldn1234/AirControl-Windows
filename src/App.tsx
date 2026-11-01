@@ -316,22 +316,36 @@ function SettingsSection({
   const [saveState, setSaveState] = useState("Changes apply only after saving.");
   const [newProfileName, setNewProfileName] = useState("");
   const [renameValue, setRenameValue] = useState("");
-  const canSave = connection === "connected";
+  const [isSaving, setIsSaving] = useState(false);
+  const runtimeAvailable = connection === "connected";
+  const canSave = runtimeAvailable && !isSaving;
   const activeProfile = preferences.profiles.find((profile) => profile.id === preferences.activeProfileId);
 
   useEffect(() => setPreferences(initialPreferences), [initialPreferences]);
 
   async function save() {
+    if (!canSave) return;
+    setIsSaving(true);
     setSaveState("Saving preferences…");
-    const saved = await savePreferences(preferences);
-    setSaveState(saved ? "Preferences saved on this PC." : "Preferences could not be saved in preview mode.");
+    try {
+      const saved = await savePreferences(preferences);
+      setSaveState(saved ? "Preferences saved on this PC." : "Preferences could not be saved.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   async function saveProfileUpdate(next: UserPreferences, message: string): Promise<boolean> {
+    if (!canSave) return false;
+    setIsSaving(true);
     setSaveState("Saving profile…");
-    const saved = await savePreferences(next);
-    setSaveState(saved ? message : "Profile could not be saved. Your previous settings are still available.");
-    return saved;
+    try {
+      const saved = await savePreferences(next);
+      setSaveState(saved ? message : "Profile could not be saved. Your previous settings are still available.");
+      return saved;
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   async function selectProfile(profile: ControlProfile) {
@@ -384,7 +398,7 @@ function SettingsSection({
   return (
     <section className="settings-panel">
       <div className="settings-intro"><span className="planned-icon"><Settings2 size={20} aria-hidden="true" /></span><div><h2>Control preferences</h2><p>Preferences are stored locally. System control remains off when AirControl starts.</p></div></div>
-      {!canSave && <RuntimeUnavailable />}
+      {!runtimeAvailable && <RuntimeUnavailable />}
       <div className="profile-settings">
         <div className="profile-settings-heading"><div><strong>Control profiles</strong><small>Profiles store gesture sensitivity and behavior on this PC. Selecting one never starts system control.</small></div><span>{activeProfile?.name ?? "No profile"}</span></div>
         <div className="profile-choice-list" role="group" aria-label="Control profile">
