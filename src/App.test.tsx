@@ -20,4 +20,26 @@ describe("AirControl desktop shell", () => {
     expect(screen.getByRole("button", { name: "Find cameras" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Start preview" })).toBeDisabled();
   });
+
+  it("keeps Air Keyboard off in browser preview and explains its camera prerequisite", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Air Keyboard" }));
+    expect(screen.getByRole("heading", { level: 1, name: "Air Keyboard" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start Air Keyboard" })).toBeDisabled();
+    expect(screen.getByText(/Enable the camera and wait for hand tracking/)).toBeInTheDocument();
+    expect(screen.getByText(/No typed characters are logged or saved/)).toBeInTheDocument();
+  });
+
+  it("renders a separate keyboard surface with Dubeolsik legends and editing keys", () => {
+    window.history.pushState({}, "", "?surface=keyboard");
+    try {
+      render(<App />);
+      expect(screen.getByRole("main", { name: "Air Keyboard" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "A" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Toggle English or Korean input" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Stop Air Keyboard" })).toBeInTheDocument();
+    } finally {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  });
 });

@@ -30,6 +30,7 @@ import type { CameraDevice, CameraFrame, CameraStatusEvent, HandTrackingStatusEv
 import type { UserPreferences } from "./domain/userPreferences";
 import type { WindowInfo } from "./domain/window";
 import { cameraLabel, canEnableCursorControl, gestureLabel, trackingLabel } from "./domain/runtimeStatus";
+import { commandKey, KEYBOARD_ROWS, type KeyboardKey } from "./keyboardLayout";
 
 const HAND_CONNECTIONS: [number, number][] = [
   [0, 1], [1, 2], [2, 3], [3, 4],
@@ -404,7 +405,117 @@ function WindowControlSection({ connection, status }: { connection: "preview" | 
   );
 }
 
-export default function App() {
+function AirKeyboardSurface() {
+  const [layout, setLayout] = useState<"english" | "korean">("english");
+  const [shift, setShift] = useState(false);
+  const [caps, setCaps] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [tracking, setTracking] = useState<RuntimeSnapshot["handTracking"]>("waiting");
+  const [modeActive, setModeActive] = useState(false);
+
+  useEffect(() => {
+    document.body.classList.add("keyboard-surface");
+    document.documentElement.classList.add("keyboard-surface");
+    return () => {
+      document.body.classList.remove("keyboard-surface");
+      document.documentElement.classList.remove("keyboard-surface");
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let stopRuntime: UnlistenFn | undefined;
+    let stopTracking: UnlistenFn | undefined;
+    const syncStatus = (snapshot: RuntimeSnapshot) => {
+      setTracking(snapshot.handTracking);
+      setModeActive(snapshot.controlMode === "airKeyboard");
+      if (snapshot.controlMode !== "airKeyboard") {
+        setLayout("english");
+        setShift(false);
+        setCaps(false);
+      }
+    };
+    void Promise.all([
+      listen<RuntimeSnapshot>("runtime-status", (event) => syncStatus(event.payload)),
+      listen<{ state: RuntimeSnapshot["handTracking"] }>("hand-tracking-status", (event) => setTracking(event.payload.state)),
+    ]).then(([runtimeListener, trackingListener]) => {
+      if (disposed) { runtimeListener(); trackingListener(); }
+      else {
+        stopRuntime = runtimeListener;
+        stopTracking = trackingListener;
+        void invoke<RuntimeSnapshot>("get_runtime_status").then((snapshot) => {
+          if (!disposed) syncStatus(snapshot);
+        }).catch(() => undefined);
+      }
+    });
+    return () => { disposed = true; stopRuntime?.(); stopTracking?.(); };
+  }, []);
+
+  async function press(key: KeyboardKey) {
+    if (!isTauri()) return;
+    try {
+      await invoke("press_air_keyboard_key", { key: commandKey(key) });
+      if (key.id === "shift") setShift((value) => !value);
+      if (key.id === "caps") setCaps((value) => !value);
+      if (key.id === "layout") setLayout((value) => value === "english" ? "korean" : "english");
+      if (key.id !== "shift") setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Key input was rejected.");
+    }
+  }
+
+  async function stopKeyboard() {
+    if (isTauri()) await invoke("set_air_keyboard_control", { enabled: false });
+  }
+
+  return (
+    <main className="air-keyboard-window" aria-label="Air Keyboard">
+      <header className="air-keyboard-header" data-tauri-drag-region><div data-tauri-drag-region><span className="keyboard-live-dot" /><strong>Air Keyboard</strong><span className="keyboard-layout-label">{layout === "korean" ? "한글 두벌식" : "English QWERTY"}</span></div><button type="button" className="keyboard-close" aria-label="Stop Air Keyboard" onClick={() => void stopKeyboard()}>×</button></header>
+      <div className="air-keyboard-rows" role="group" aria-label={`${layout} keyboard layout`}>
+        {KEYBOARD_ROWS.map((row, rowIndex) => <div className="air-keyboard-row" key={rowIndex}>
+          {row.map((key) => <button type="button" key={key.id} data-key={key.id} className={`air-key ${key.kind ?? "letter"} ${((key.id === "shift" && shift) || (key.id === "caps" && caps)) ? "armed" : ""}`} style={{ flexGrow: key.width ?? 1 }} aria-label={key.id === "layout" ? "Toggle English or Korean input" : key.label} aria-pressed={key.id === "shift" ? shift : key.id === "caps" ? caps : undefined} disabled={!modeActive} onClick={() => void press(key)}>
+            <span>{layout === "korean" && key.korean ? key.korean : key.label}</span>
+            {key.korean && layout === "english" && <small>{key.korean}</small>}
+            {key.shifted && <small className="shifted-legend">{key.shifted}</small>}
+          </button>)}
+        </div>)}
+      </div>
+      <footer className="air-keyboard-footer"><span>{tracking === "detected" ? "Point with your index finger · pinch briefly to type" : "Hand tracking paused · waiting for a confident hand pose"}</span><span>Text is sent directly to the active app and is never stored.</span></footer>
+      {error && <p className="air-keyboard-error" role="alert">{error}</p>}
+    </main>
+  );
+}
+
+function AirKeyboardSection({ connection, status }: { connection: "preview" | "connected" | "error"; status: RuntimeSnapshot | null }) {
+  const [message, setMessage] = useState("");
+  const enabled = status?.controlMode === "airKeyboard";
+  const canEnable = connection === "connected" && status?.camera === "running" && status?.handTracking === "detected" && status.controlMode === "disabled";
+  async function toggle() {
+    if (!isTauri() || (!enabled && !canEnable)) return;
+    try {
+      await invoke("set_air_keyboard_control", { enabled: !enabled });
+      setMessage(enabled ? "Air Keyboard stopped and temporary modifier state was cleared." : "Keyboard is active. The floating panel does not take keyboard focus from the target app.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+  }
+  return <section className="keyboard-control-panel" aria-label="Air Keyboard controls">
+    <div className="settings-intro"><span className="planned-icon"><Keyboard size={20} aria-hidden="true" /></span><div><h2>Type with hand gestures</h2><p>Enable the camera and wait for hand tracking. Point at a key, then make a brief thumb and index pinch.</p></div></div>
+    <div className="keyboard-mode-row"><span className={`keyboard-mode-pill ${enabled ? "active" : ""}`}><span />{enabled ? "Keyboard control active" : "Keyboard control off"}</span><button type="button" className={enabled ? "secondary-button" : "primary-button save-button"} disabled={!enabled && !canEnable} onClick={() => void toggle()}>{enabled ? "Stop Air Keyboard" : "Start Air Keyboard"}</button></div>
+    {connection !== "connected" && <RuntimeUnavailable detail="Air Keyboard input is available in the Windows desktop app." />}
+    {!enabled && connection === "connected" && status?.camera !== "running" && <p className="keyboard-guidance">Start the camera from Camera &amp; tracking first. Hand control remains off until you start it here.</p>}
+    {enabled && <p className="window-mode-status">Aim the hand cursor at the floating keyboard. Short pinches click once; a long pinch is ignored. Stop the camera or this mode to end input.</p>}
+    <div className="keyboard-preview" aria-label="Keyboard preview"><span className="eyebrow">LAYOUT PREVIEW</span>{KEYBOARD_ROWS.slice(0, 3).map((row, index) => <div className="keyboard-preview-row" key={index}>{row.map((key) => <span key={key.id}>{key.label}</span>)}</div>)}</div>
+    <p className="keyboard-privacy-note">No typed characters are logged or saved. The layout toggle sends the Windows Hangul key; AirControl does not inspect IME changes made outside this panel.</p>
+    <p className="keyboard-status" role="status">{message}</p>
+  </section>;
+}
+
+function App() {
+  if (new URLSearchParams(window.location.search).get("surface") === "keyboard") return <AirKeyboardSurface />;
+  return <DashboardApp />;
+}
+
+function DashboardApp() {
   const [activeSection, setActiveSection] = useState("Overview");
   const { status, preferences, connection, error, refresh, savePreferences, listCameras, startCamera, stopCamera, setCursorControl, setRuntimeStatus, setCameraState, setHandTrackingState } = useRuntimeStore();
 
@@ -447,10 +558,12 @@ export default function App() {
         <header className="topbar"><div className="breadcrumbs"><span>AirControl</span><ChevronRight size={14} /><strong>{activeSection}</strong></div><div className="topbar-actions"><span className={`runtime-chip ${connection}`}><span />{connection === "connected" ? "Runtime connected" : "Preview mode"}</span><button className="icon-button" type="button" aria-label="Keyboard shortcuts"><Command size={16} /></button><span className="topbar-avatar">D</span></div></header>
         <div className="content-scroll">
           <div className="page-title-row"><div><div className="eyebrow page-eyebrow">{activeSection === "Overview" ? "YOUR WORKSPACE" : "AIRCONTROL"}</div><h1>{activeSection}</h1><p>{sectionDescriptions[activeSection]}</p></div><span className="phase-badge">{activeSection === "Overview" ? "LOCAL FIRST" : "IN DEVELOPMENT"}</span></div>
-          {activeSection === "Overview" ? <Overview status={status} connection={connection} error={error} setCursorControl={setCursorControl} /> : activeSection === "Settings" ? <SettingsSection connection={connection} initialPreferences={preferences} savePreferences={savePreferences} /> : activeSection === "Camera & tracking" ? <CameraSection connection={connection} cameraState={status?.camera ?? "unavailable"} handTrackingState={status?.handTracking ?? "waiting"} error={error} listCameras={listCameras} startCamera={startCamera} stopCamera={stopCamera} setCameraState={setCameraState} setHandTrackingState={setHandTrackingState} /> : activeSection === "Window control" ? <WindowControlSection connection={connection} status={status} /> : <PlannedSection title={activeSection} />}
+          {activeSection === "Overview" ? <Overview status={status} connection={connection} error={error} setCursorControl={setCursorControl} /> : activeSection === "Settings" ? <SettingsSection connection={connection} initialPreferences={preferences} savePreferences={savePreferences} /> : activeSection === "Camera & tracking" ? <CameraSection connection={connection} cameraState={status?.camera ?? "unavailable"} handTrackingState={status?.handTracking ?? "waiting"} error={error} listCameras={listCameras} startCamera={startCamera} stopCamera={stopCamera} setCameraState={setCameraState} setHandTrackingState={setHandTrackingState} /> : activeSection === "Window control" ? <WindowControlSection connection={connection} status={status} /> : activeSection === "Air Keyboard" ? <AirKeyboardSection connection={connection} status={status} /> : <PlannedSection title={activeSection} />}
           <footer className="page-footer"><span>AirControl for Windows <span className="footer-divider">·</span> Foundation build</span><span>Local processing <span className="footer-divider">·</span> No cloud connection</span></footer>
         </div>
       </main>
     </div>
   );
 }
+
+export default App;

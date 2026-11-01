@@ -2,11 +2,13 @@ use aircontrol_core::RuntimeSnapshot;
 use aircontrol_core::UserPreferences;
 use camera::{CameraDevice, CameraService};
 use tauri::{AppHandle, Emitter, State};
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_log::{Target, TargetKind};
 
 mod camera;
 mod cursor;
 mod hand_tracking;
+mod keyboard;
 mod settings;
 mod window_manager;
 
@@ -78,6 +80,7 @@ fn start_camera(
     camera_service: State<'_, CameraService>,
     cursor: State<'_, cursor::CursorController>,
     window_control: State<'_, window_manager::WindowGestureController>,
+    keyboard: State<'_, keyboard::KeyboardController>,
     device_id: String,
 ) -> Result<(), String> {
     let preferences = settings::load(&app)?;
@@ -85,9 +88,12 @@ fn start_camera(
         app,
         runtime.snapshot.clone(),
         device_id,
-        cursor.inner().clone(),
-        window_control.inner().clone(),
-        preferences.pinch_sensitivity,
+        camera::GestureControl {
+            cursor: cursor.inner().clone(),
+            window: window_control.inner().clone(),
+            keyboard: keyboard.inner().clone(),
+            pinch_sensitivity: preferences.pinch_sensitivity,
+        },
     )
 }
 
@@ -98,12 +104,20 @@ fn stop_camera(
     camera_service: State<'_, CameraService>,
     cursor: State<'_, cursor::CursorController>,
     window_control: State<'_, window_manager::WindowGestureController>,
+    keyboard: State<'_, keyboard::KeyboardController>,
 ) -> Result<(), String> {
-    let result = camera_service.stop(&runtime.snapshot, &app);
-    cursor.disable()?;
-    window_control.disable()?;
+    let camera_result = camera_service.stop(&runtime.snapshot, &app);
+    let cursor_result = cursor.disable();
+    let window_result = window_control.disable();
+    let keyboard_result = keyboard.reset();
+    if let Some(window) = app.get_webview_window("air-keyboard") {
+        let _ = window.hide();
+    }
     set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled);
-    result
+    camera_result
+        .and(cursor_result)
+        .and(window_result)
+        .and(keyboard_result)
 }
 
 #[tauri::command]
@@ -208,6 +222,126 @@ fn set_window_control(
 }
 
 #[tauri::command]
+fn set_air_keyboard_control(
+    enabled: bool,
+    app: AppHandle,
+    runtime: State<'_, RuntimeState>,
+    cursor: State<'_, cursor::CursorController>,
+    window_control: State<'_, window_manager::WindowGestureController>,
+    keyboard: State<'_, keyboard::KeyboardController>,
+) -> Result<(), String> {
+    if enabled {
+        let snapshot = runtime
+            .snapshot
+            .lock()
+            .map_err(|_| "Runtime status is temporarily unavailable.".to_owned())?
+            .clone();
+        let readiness = aircontrol_core::ControlReadiness {
+            camera_running: snapshot.camera == aircontrol_core::CameraState::Running,
+            hand_pose_detected: snapshot.hand_tracking
+                == aircontrol_core::HandTrackingState::Detected,
+        };
+        if !readiness.can_enable() {
+            return Err(
+                "Start the camera and wait for hand tracking before enabling Air Keyboard."
+                    .to_owned(),
+            );
+        }
+        if snapshot.control_mode != aircontrol_core::ControlMode::Disabled {
+            return Err("Stop the active control mode before enabling Air Keyboard.".to_owned());
+        }
+        let preferences = settings::load(&app)?;
+        cursor.disable()?;
+        window_control.disable()?;
+        keyboard.reset()?;
+        show_air_keyboard(&app)?;
+        let Some(bounds) = keyboard::overlay_bounds(&app) else {
+            if let Some(window) = app.get_webview_window("air-keyboard") {
+                let _ = window.hide();
+            }
+            return Err("Windows did not report the floating keyboard position.".to_owned());
+        };
+        if let Err(error) = cursor.enable_air_keyboard(
+            preferences.camera_mirrored,
+            preferences.cursor_sensitivity,
+            preferences.cursor_smoothing,
+            bounds,
+        ) {
+            if let Some(window) = app.get_webview_window("air-keyboard") {
+                let _ = window.hide();
+            }
+            return Err(error);
+        }
+        set_control_mode(&runtime, &app, aircontrol_core::ControlMode::AirKeyboard);
+    } else {
+        let cursor_result = cursor.disable();
+        let keyboard_result = keyboard.reset();
+        if let Some(window) = app.get_webview_window("air-keyboard") {
+            let _ = window.hide();
+        }
+        let current_mode = runtime
+            .snapshot
+            .lock()
+            .map_err(|_| "Runtime status is temporarily unavailable.".to_owned())?
+            .control_mode;
+        if current_mode == aircontrol_core::ControlMode::AirKeyboard {
+            set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled);
+        }
+        cursor_result.and(keyboard_result)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn press_air_keyboard_key(
+    key: String,
+    app: AppHandle,
+    runtime: State<'_, RuntimeState>,
+    keyboard: State<'_, keyboard::KeyboardController>,
+) -> Result<(), String> {
+    let snapshot = runtime
+        .snapshot
+        .lock()
+        .map_err(|_| "Runtime status is temporarily unavailable.".to_owned())?;
+    if snapshot.control_mode != aircontrol_core::ControlMode::AirKeyboard {
+        return Err("Enable Air Keyboard before sending a key.".to_owned());
+    }
+    let window = app
+        .get_webview_window("air-keyboard")
+        .ok_or_else(|| "The Air Keyboard surface is not available.".to_owned())?;
+    if !window.is_visible().unwrap_or(false) {
+        return Err("Show Air Keyboard before sending a key.".to_owned());
+    }
+    keyboard.press(&key)
+}
+
+fn show_air_keyboard(app: &AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("air-keyboard") {
+        return window
+            .show()
+            .map_err(|error| format!("Air Keyboard could not be shown: {error}"));
+    }
+    WebviewWindowBuilder::new(
+        app,
+        "air-keyboard",
+        WebviewUrl::App("index.html?surface=keyboard".into()),
+    )
+    .title("Air Keyboard")
+    .inner_size(760.0, 304.0)
+    .min_inner_size(560.0, 270.0)
+    .decorations(false)
+    .transparent(true)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .focusable(false)
+    .focused(false)
+    .center()
+    .build()
+    .map(|_| ())
+    .map_err(|error| format!("Air Keyboard window could not be created: {error}"))
+}
+
+#[tauri::command]
 fn list_control_windows() -> Result<Vec<window_manager::WindowInfo>, String> {
     window_manager::list_windows()
 }
@@ -303,6 +437,7 @@ pub fn run() {
         .manage(CameraService::default())
         .manage(cursor::CursorController::default())
         .manage(window_manager::WindowGestureController::default())
+        .manage(keyboard::KeyboardController::default())
         .setup(|_app| {
             log::info!("AirControl started with system controls disabled");
             Ok(())
@@ -316,6 +451,8 @@ pub fn run() {
             stop_camera,
             set_cursor_control,
             set_window_control,
+            set_air_keyboard_control,
+            press_air_keyboard_key,
             list_control_windows,
             get_foreground_control_window,
             focus_control_window,

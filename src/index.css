@@ -3,6 +3,8 @@
 :root { font-family: Inter, "Segoe UI Variable", "Segoe UI", sans-serif; color: #e6e8ed; background: #111318; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; font-size: 13px; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 860px; min-height: 100vh; }
+body.keyboard-surface { min-width: 0; overflow: hidden; }
+html.keyboard-surface,body.keyboard-surface { background:transparent; }
 button { font: inherit; }
 button:focus-visible,input:focus-visible { outline: 2px solid #83a9f5; outline-offset: 2px; }
 .app-shell { display: flex; min-height: 100vh; background: #111318; }
@@ -197,6 +199,41 @@ h1 { margin-bottom:5px; color:#f1f2f5; font-size:24px; font-weight:610; letter-s
 .window-empty-state svg { color:#9fb5dc; }
 .window-empty-state strong { color:#d8dce4; font-size:11px; }
 .window-empty-state span { font-size:9px; }
+.keyboard-control-panel { padding:22px 25px; border:1px solid #2d3038; border-radius:9px; background:#191b20; }
+.keyboard-mode-row { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:17px 0 13px; }
+.keyboard-mode-pill { display:inline-flex; align-items:center; gap:8px; color:#969ca7; font-size:10px; }
+.keyboard-mode-pill>span,.keyboard-live-dot { width:7px; height:7px; border-radius:50%; background:#777d87; }
+.keyboard-mode-pill.active { color:#a7d5b7; }
+.keyboard-mode-pill.active>span,.keyboard-live-dot { background:#71bd91; box-shadow:0 0 8px #71bd9160; }
+.keyboard-guidance,.keyboard-privacy-note,.keyboard-status { margin:8px 0; color:#8f96a2; font-size:10px; line-height:1.55; }
+.keyboard-privacy-note { padding-top:11px; border-top:1px solid #2d3038; }
+.keyboard-preview { display:grid; gap:7px; padding:14px; border:1px solid #30343d; border-radius:6px; background:#15171c; }
+.keyboard-preview>.eyebrow { margin-bottom:2px; }
+.keyboard-preview-row { display:flex; justify-content:center; gap:5px; }
+.keyboard-preview-row span { display:grid; place-items:center; min-width:28px; height:25px; padding:0 5px; border:1px solid #383d47; border-radius:4px; color:#c9ced8; background:#252830; font-size:9px; }
+.air-keyboard-window { box-sizing:border-box; display:flex; flex-direction:column; min-height:100vh; padding:12px 14px 9px; color:#e7eaf0; background:linear-gradient(145deg,#20242bef,#13161bea); border:1px solid #454b56; border-radius:10px; }
+.air-keyboard-header { display:flex; align-items:center; justify-content:space-between; min-height:27px; margin-bottom:8px; }
+.air-keyboard-header,[data-tauri-drag-region] { cursor:grab; }
+.air-keyboard-header>div { display:flex; align-items:center; gap:8px; }
+.air-keyboard-header strong { color:#e9edf5; font-size:11px; font-weight:620; letter-spacing:.15px; }
+.keyboard-layout-label { padding-left:7px; border-left:1px solid #444954; color:#9ca5b4; font-size:9px; }
+.keyboard-close { display:grid; place-items:center; width:25px; height:23px; border:1px solid transparent; border-radius:4px; color:#a9afba; background:transparent; font-size:19px; line-height:1; cursor:pointer; }
+.keyboard-close:hover { border-color:#74494d; color:#ffaaaa; background:#4b282e; }
+.air-keyboard-rows { display:flex; flex:1; flex-direction:column; justify-content:center; gap:6px; min-height:0; }
+.air-keyboard-row { display:flex; justify-content:center; gap:5px; min-height:40px; }
+.air-key { position:relative; display:flex; flex:1 1 0; flex-direction:column; align-items:center; justify-content:center; min-width:0; padding:3px 5px; border:1px solid #454a55; border-radius:5px; color:#dce1e9; background:#292d35; box-shadow:0 1px 0 #0b0d10; cursor:pointer; user-select:none; transition:background .12s,border-color .12s,transform .12s; }
+.air-key:hover { border-color:#68758a; background:#363c47; }
+.air-key:active { transform:translateY(1px); background:#414958; }
+.air-key:disabled { cursor:default; opacity:.72; }
+.air-key:focus-visible { outline:2px solid #90b1f0; outline-offset:1px; }
+.air-key>span { font-size:13px; font-weight:560; line-height:1.05; }
+.air-key>small { position:absolute; right:4px; top:3px; color:#758092; font-size:7px; }
+.air-key>small.shifted-legend { left:4px; right:auto; color:#b1b9c8; }
+.air-key.action { color:#bac5d7; background:#242a34; }
+.air-key.modifier { color:#bac8e0; background:#293243; }
+.air-key.armed { border-color:#83a8e9; color:#f2f6ff; background:#3b4d6b; box-shadow:inset 0 0 0 1px #83a8e958; }
+.air-keyboard-footer { display:flex; justify-content:space-between; gap:12px; padding-top:7px; color:#808a9b; font-size:8px; }
+.air-keyboard-error { margin:4px 0 0; color:#eca2a4; font-size:9px; }
 .spinning { animation:spin 1s linear infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
 @media (max-width:1100px) { .sidebar { width:220px; flex-basis:220px; }.content-scroll { padding-left:28px; padding-right:28px; }.gesture-art { right:5px; opacity:.58; } }

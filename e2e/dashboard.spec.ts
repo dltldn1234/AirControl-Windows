@@ -26,3 +26,12 @@ test("window controls stay unavailable in browser preview mode", async ({ page }
   await expect(page.getByText("Window enumeration and controls are available in the Windows desktop app.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Start hand move" })).toBeDisabled();
 });
+
+test("Air Keyboard preview exposes the layout without sending system key events", async ({ page }) => {
+  await page.goto("/?surface=keyboard");
+
+  await expect(page.getByRole("main", { name: "Air Keyboard" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Toggle English or Korean input" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Stop Air Keyboard" })).toBeVisible();
+  await expect(page.getByText("Hand tracking paused · waiting for a confident hand pose")).toBeVisible();
+});

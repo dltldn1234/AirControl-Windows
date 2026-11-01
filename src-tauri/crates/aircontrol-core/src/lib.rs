@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 pub mod cursor;
 pub mod filter;
 pub mod gesture;
+pub mod keyboard;
 pub mod scroll;
 pub mod window;
 
