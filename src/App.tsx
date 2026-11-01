@@ -27,7 +27,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useRuntimeStore } from "./state/runtimeStore";
 import type { RuntimeSnapshot } from "./domain/runtimeStatus";
 import type { CameraDevice, CameraFrame, CameraStatusEvent, HandTrackingStatusEvent } from "./domain/camera";
-import type { UserPreferences } from "./domain/userPreferences";
+import { BUILT_IN_PROFILES, isValidProfileName, withProfileSettings, type ControlProfile, type UserPreferences } from "./domain/userPreferences";
 import type { WindowInfo } from "./domain/window";
 import { cameraLabel, canEnableCursorControl, gestureLabel, trackingLabel } from "./domain/runtimeStatus";
 import { commandKey, KEYBOARD_ROWS, type KeyboardKey } from "./keyboardLayout";
@@ -314,7 +314,10 @@ function SettingsSection({
 }) {
   const [preferences, setPreferences] = useState(initialPreferences);
   const [saveState, setSaveState] = useState("Changes apply only after saving.");
+  const [newProfileName, setNewProfileName] = useState("");
+  const [renameValue, setRenameValue] = useState("");
   const canSave = connection === "connected";
+  const activeProfile = preferences.profiles.find((profile) => profile.id === preferences.activeProfileId);
 
   useEffect(() => setPreferences(initialPreferences), [initialPreferences]);
 
@@ -324,10 +327,96 @@ function SettingsSection({
     setSaveState(saved ? "Preferences saved on this PC." : "Preferences could not be saved in preview mode.");
   }
 
+  async function saveProfileUpdate(next: UserPreferences, message: string): Promise<boolean> {
+    setSaveState("Saving profile…");
+    const saved = await savePreferences(next);
+    setSaveState(saved ? message : "Profile could not be saved. Your previous settings are still available.");
+    return saved;
+  }
+
+  async function selectProfile(profile: ControlProfile) {
+    if (await saveProfileUpdate(withProfileSettings(preferences, profile), `${profile.name} profile selected.`)) {
+      setRenameValue("");
+    }
+  }
+
+  async function createProfile() {
+    const name = newProfileName.trim();
+    if (!isValidProfileName(name, preferences.profiles)) {
+      setSaveState("Use a unique profile name with 1–32 characters.");
+      return;
+    }
+    const profile: ControlProfile = {
+      id: crypto.randomUUID(),
+      name,
+      builtIn: false,
+      settings: {
+        cursorSensitivity: preferences.cursorSensitivity,
+        cursorSmoothing: preferences.cursorSmoothing,
+        pinchSensitivity: preferences.pinchSensitivity,
+        windowSensitivity: preferences.windowSensitivity,
+        scrollSensitivity: preferences.scrollSensitivity,
+        reverseScrollDirection: preferences.reverseScrollDirection,
+        rightClickEnabled: preferences.rightClickEnabled,
+        cameraMirrored: preferences.cameraMirrored,
+        appSwitchEnabled: preferences.appSwitchEnabled,
+      },
+    };
+    const next = withProfileSettings({ ...preferences, profiles: [...preferences.profiles, profile] }, profile);
+    if (await saveProfileUpdate(next, `${name} profile created.`)) {
+      setNewProfileName("");
+      setRenameValue("");
+    }
+  }
+
+  async function renameProfile() {
+    if (!activeProfile || activeProfile.builtIn) return;
+    const name = renameValue.trim();
+    if (!isValidProfileName(name, preferences.profiles, activeProfile.id)) {
+      setSaveState("Use a unique profile name with 1–32 characters.");
+      return;
+    }
+    const profiles = preferences.profiles.map((profile) => profile.id === activeProfile.id ? { ...profile, name } : profile);
+    if (await saveProfileUpdate({ ...preferences, profiles }, `Profile renamed to ${name}.`)) setRenameValue("");
+  }
+
+  async function deleteProfile() {
+    if (!activeProfile || activeProfile.builtIn) return;
+    const fallback = preferences.profiles.find((profile) => profile.id === "productivity");
+    if (!fallback) return;
+    const profiles = preferences.profiles.filter((profile) => profile.id !== activeProfile.id);
+    await saveProfileUpdate(withProfileSettings({ ...preferences, profiles }, fallback), `${activeProfile.name} profile deleted.`);
+  }
+
+  async function restoreProfile() {
+    if (!activeProfile) return;
+    const preset = BUILT_IN_PROFILES.find((profile) => profile.id === activeProfile.id) ?? BUILT_IN_PROFILES[0];
+    const profiles = preferences.profiles.map((profile) => profile.id === activeProfile.id
+      ? { ...profile, settings: preset.settings }
+      : profile);
+    await saveProfileUpdate(withProfileSettings({ ...preferences, profiles }, { ...activeProfile, settings: preset.settings }), `${activeProfile.name} settings restored.`);
+  }
+
   return (
     <section className="settings-panel">
       <div className="settings-intro"><span className="planned-icon"><Settings2 size={20} aria-hidden="true" /></span><div><h2>Control preferences</h2><p>Preferences are stored locally. System control remains off when AirControl starts.</p></div></div>
       {!canSave && <RuntimeUnavailable />}
+      <div className="profile-settings">
+        <div className="profile-settings-heading"><div><strong>Control profiles</strong><small>Profiles store gesture sensitivity and behavior on this PC. Selecting one never starts system control.</small></div><span>{activeProfile?.name ?? "No profile"}</span></div>
+        <div className="profile-choice-list" role="group" aria-label="Control profile">
+          {preferences.profiles.map((profile) => <button type="button" key={profile.id} className={`profile-choice${profile.id === preferences.activeProfileId ? " selected" : ""}`} aria-label={`${profile.name}, ${profile.builtIn ? "built-in preset" : "custom profile"}`} aria-pressed={profile.id === preferences.activeProfileId} disabled={!canSave} onClick={() => void selectProfile(profile)}><strong>{profile.name}</strong><small>{profile.builtIn ? "Built-in preset" : "Your profile"}</small></button>)}
+        </div>
+        <div className="profile-actions">
+          <label className="profile-name-field"><span className="sr-only">New profile name</span><input aria-label="New profile name" maxLength={32} value={newProfileName} disabled={!canSave} placeholder="Name a profile" onChange={(event) => setNewProfileName(event.currentTarget.value)} /></label>
+          <button type="button" className="secondary-button" disabled={!canSave || !newProfileName.trim()} onClick={() => void createProfile()}>Save current as profile</button>
+          {activeProfile && !activeProfile.builtIn && <>
+            <label className="profile-name-field"><span className="sr-only">Rename profile</span><input aria-label="Rename profile" maxLength={32} value={renameValue || activeProfile.name} disabled={!canSave} onChange={(event) => setRenameValue(event.currentTarget.value)} /></label>
+            <button type="button" className="secondary-button" disabled={!canSave || !renameValue.trim() || renameValue.trim() === activeProfile.name} onClick={() => void renameProfile()}>Rename</button>
+            <button type="button" className="secondary-button danger-button" disabled={!canSave} onClick={() => void deleteProfile()}>Delete</button>
+          </>}
+          {activeProfile?.builtIn && <button type="button" className="secondary-button" disabled={!canSave} onClick={() => void restoreProfile()}>Restore preset</button>}
+        </div>
+      </div>
       <label className="setting-control"><span><strong>Cursor sensitivity</strong><small>Adjust movement gain after calibration.</small></span><span className="range-control"><input aria-label="Cursor sensitivity" type="range" min="0.5" max="2" step="0.1" value={preferences.cursorSensitivity} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, cursorSensitivity: Number(event.currentTarget.value) })} /><output>{preferences.cursorSensitivity.toFixed(1)}×</output></span></label>
       <label className="setting-control"><span><strong>Cursor smoothing</strong><small>Balance steady motion and responsiveness.</small></span><span className="range-control"><input aria-label="Cursor smoothing" type="range" min="0" max="0.9" step="0.05" value={preferences.cursorSmoothing} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, cursorSmoothing: Number(event.currentTarget.value) })} /><output>{preferences.cursorSmoothing.toFixed(2)}</output></span></label>
       <label className="setting-control"><span><strong>Pinch sensitivity</strong><small>Set the normalized pinch threshold.</small></span><span className="range-control"><input aria-label="Pinch sensitivity" type="range" min="0.6" max="1.4" step="0.05" value={preferences.pinchSensitivity} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, pinchSensitivity: Number(event.currentTarget.value) })} /><output>{preferences.pinchSensitivity.toFixed(2)}</output></span></label>
