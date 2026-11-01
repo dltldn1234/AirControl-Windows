@@ -16,5 +16,13 @@ test("camera page clearly separates native capture from browser preview", async 
   await expect(page.getByRole("heading", { name: "Camera source" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Find cameras" })).toBeDisabled();
   await expect(page.getByText("Local hand inference is waiting for a camera frame.")).toBeVisible();
-  await expect(page.getByText("Open AirControl as a desktop app to access its camera service.")).toBeVisible();
+});
+
+test("window controls stay unavailable in browser preview mode", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Window control" }).click();
+
+  await expect(page.getByRole("heading", { name: "Application windows" })).toBeVisible();
+  await expect(page.getByText("Window enumeration and controls are available in the Windows desktop app.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start hand move" })).toBeDisabled();
 });
