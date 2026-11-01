@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod cursor;
+pub mod filter;
 pub mod gesture;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
