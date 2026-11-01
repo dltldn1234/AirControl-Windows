@@ -285,6 +285,23 @@ fn cycle_application(direction: SwipeDirection) -> Result<bool, String> {
     }
 }
 
+pub fn switch_to_next_application() -> Result<(), String> {
+    if cycle_application(SwipeDirection::Next)? {
+        Ok(())
+    } else {
+        Err("No other eligible application window is available.".to_owned())
+    }
+}
+
+pub fn focus_next_application_window() -> Result<(), String> {
+    let handle = list_windows()?
+        .into_iter()
+        .next()
+        .map(|window| window.handle)
+        .ok_or_else(|| "No eligible application window is available.".to_owned())?;
+    focus_window(&handle)
+}
+
 pub fn move_window_by(handle: &str, delta: [f32; 2]) -> Result<WindowRect, String> {
     let handle = parse_handle(handle)?;
     let current = platform::get_window(handle)?;
