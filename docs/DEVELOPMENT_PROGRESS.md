@@ -1,17 +1,24 @@
 # Development Progress
 
-## Current state (2026-11-01, Issue #15)
+## Current state (2026-11-01, Issue #17)
 
-- `main` baseline: 59 commits at `4380f5343b55a449f02cbb7035a60f5a14c3fc56` (PR #14 merge); Issue #15 branch `15-fix/keyboard-state` is isolated from the original dirty checkout.
-- Issue: [#15 — Keep Air Keyboard modifier feedback accurate after tracking loss](https://github.com/dltldn1234/AirControl-Windows/issues/15).
+- `main` has 66 commits at `9324912` after PR #16 merged. Issue #17 is on `17-feat/hand-association`, based on current `main`; three implementation/test commits are currently ahead.
+- Issue: [#17 — Keep tracked hand identities stable across camera frames](https://github.com/dltldn1234/AirControl-Windows/issues/17).
+- Added a two-track wrist-center associator with bounded nearest-neighbor matching, short velocity prediction, two-frame loss tolerance, and reset behavior. Camera routing now binds landmarks to stable track slots instead of detector confidence order, and falls back to the remaining live hand without reusing stale landmarks.
+- Local verification: Rust workspace 75 tests passed, rustfmt passed, Clippy with warnings denied passed. Manual camera crossing/reacquisition, cursor hand continuity, and window resize checks remain Windows PC checks.
+- Next: push the branch, validate Windows CI, and open/merge the Issue #17 PR if checks pass.
+
+## Previous state (Issue #15)
+
+- Issue: [#15 — Keep Air Keyboard modifier feedback accurate after tracking loss](https://github.com/dltldn1234/AirControl-Windows/issues/15); PR #16 merged normally at `9324912` after Windows CI run [41287447837](https://github.com/dltldn1234/AirControl-Windows/actions/runs/41287447837) passed.
 - Removed AirControl's local Caps Lock state because it cannot represent the target app's global Windows toggle state. The key still emits the Caps Lock virtual key.
 - Shift feedback now follows native keyboard session transitions and clears when tracking is lost; accepted keys, layout selection, and mode stop share a tested feedback reducer.
 - English/Korean is labeled as a keycap legend selection. UI copy states that AirControl does not inspect the foreground application's IME state and directs users to that application's indicator.
-- Local verification: Rust workspace 68 tests passed, rustfmt passed, Clippy with warnings denied passed; frontend typecheck passed, Vitest 16 passed, Vite production build passed, Playwright Chromium 4 passed.
-- Windows CI and manual Windows overlay/focus, global Caps Lock, and Korean IME behavior remain to be verified.
-- This branch has 3 implementation/test commits and 3 progress-documentation commits (6 total) on the 59-commit main baseline.
+- Local verification: Rust workspace 68 tests passed, rustfmt and Clippy passed; frontend typecheck, 16 Vitest tests, Vite production build, and 4 Playwright tests passed. Windows CI passed including Windows executable build.
+- Manual Windows overlay/focus, global Caps Lock, and Korean IME behavior remain unverified on physical Windows hardware.
+- Issue #15 contributed six branch commits on the 59-commit baseline; merge commit brought `main` to 66 commits.
 
-## Current state (2026-11-01, Issue #13)
+## Previous state (2026-11-01, Issue #13)
 
 - `main` baseline: 50 commits at `f16f47cdf3af38948ee155e99c5e98185fd0e7fc` (PR #12 merge); Issue #13 branch `13-feat/air-keyboard` began from that head.
 - Issue: [#13 — Implement safe Air Keyboard input](https://github.com/dltldn1234/AirControl-Windows/issues/13).
@@ -79,25 +86,25 @@
 - Issue #7 local verification: Rust workspace tests 38 passed, Clippy with warnings denied passed, formatting passed, TypeScript typecheck passed, Vitest 5 passed (including native camera/pose activation gating), Vite production build passed, Playwright Chromium 2 passed.
 - Issue #7 Windows native compilation and actual cursor behavior remain pending Windows CI and Windows PC validation; this macOS host cannot exercise `SendInput` or a Windows camera.
 
-## In progress
+## Current outstanding work
 
 - Phase 5 cursor movement and pinch click/drag dispatch: merged through PR #8 after Windows CI passed; actual cursor behavior still needs a Windows PC check.
 - Phase 6 scroll and right-click gestures: implemented and merged through PR #11 after all Windows CI checks passed.
-- Phase 7 window control: implemented in Issue #10 branch with local checks passing; Windows CI is pending on its PR, and real window behavior needs a Windows PC.
+- Phase 7 window control: merged through PR #12; real window behavior needs a Windows PC.
 - Phase 4 ONNX hand tracking: merged through PR #6 after successful Windows CI; actual webcam landmark quality still needs a Windows PC check.
 
 ## Not implemented
 
 - Gesture-driven app switching is not implemented; the Window panel can activate a user-selected eligible window.
-- Air Keyboard, calibration, gesture customization, tray integration, and Windows packaging remain unimplemented.
-- Calibration, gesture customization, tray integration, and Windows packaging.
+- Calibration, gesture customization, tray integration, and Windows packaging remain unimplemented.
+- Air Keyboard physical IME/focus behavior and hand tracking quality need Windows PC validation.
 - Windows PC hardware validation.
 
 ## Next
 
-1. Open a draft PR for Issue #10 and validate its Windows-only APIs in CI.
-2. Implement gesture-driven app switching and begin the next scoped feature issue.
-3. Validate camera, cursor, click, scroll, resize, and window behavior on a Windows PC; this macOS host cannot provide that evidence.
+1. Finish and submit Issue #17 for Windows CI review.
+2. Implement gesture-driven app switching in a separate issue.
+3. Validate camera, cursor, click, scroll, resize, Air Keyboard IME/focus, and tracking continuity on a Windows PC; this macOS host cannot provide that evidence.
 
 ## Follow-up (2026-11-01, Issue #9)
 
