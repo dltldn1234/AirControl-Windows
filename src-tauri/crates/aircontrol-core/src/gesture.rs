@@ -8,6 +8,19 @@ pub enum PinchAction {
     DragEnd,
 }
 
+pub fn next_cursor_gesture(
+    current: crate::ActiveGesture,
+    action: PinchAction,
+) -> crate::ActiveGesture {
+    match action {
+        PinchAction::Click => crate::ActiveGesture::Click,
+        PinchAction::DragStart => crate::ActiveGesture::Drag,
+        PinchAction::DragEnd => crate::ActiveGesture::Cursor,
+        PinchAction::None if current == crate::ActiveGesture::Click => crate::ActiveGesture::Cursor,
+        PinchAction::None => current,
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 enum PinchState {
     Idle,
@@ -107,7 +120,7 @@ impl PinchRecognizer {
 
 #[cfg(test)]
 mod tests {
-    use super::{PinchAction, PinchRecognizer};
+    use super::{PinchAction, PinchRecognizer, next_cursor_gesture};
     use std::time::{Duration, Instant};
 
     #[test]
@@ -169,6 +182,28 @@ mod tests {
         assert_eq!(
             recognizer.update(Some(0.1), 1.0, start + Duration::from_millis(500)),
             PinchAction::None
+        );
+    }
+
+    #[test]
+    fn cursor_status_tracks_click_and_drag_transitions() {
+        use crate::ActiveGesture;
+
+        assert_eq!(
+            next_cursor_gesture(ActiveGesture::Cursor, PinchAction::Click),
+            ActiveGesture::Click
+        );
+        assert_eq!(
+            next_cursor_gesture(ActiveGesture::Click, PinchAction::None),
+            ActiveGesture::Cursor
+        );
+        assert_eq!(
+            next_cursor_gesture(ActiveGesture::Drag, PinchAction::None),
+            ActiveGesture::Drag
+        );
+        assert_eq!(
+            next_cursor_gesture(ActiveGesture::Drag, PinchAction::DragEnd),
+            ActiveGesture::Cursor
         );
     }
 }
