@@ -1,5 +1,6 @@
 use crate::cursor::CursorController;
 use crate::hand_tracking::HandTrackingModels;
+use crate::keyboard::KeyboardController;
 use crate::window_manager::WindowGestureController;
 use aircontrol_core::gesture::{PinchAction, next_cursor_gesture};
 use aircontrol_core::{CameraState, RuntimeSnapshot};
@@ -55,10 +56,11 @@ struct CameraWorker {
     thread: Option<JoinHandle<()>>,
 }
 
-struct GestureControl {
-    cursor: CursorController,
-    window: WindowGestureController,
-    pinch_sensitivity: f32,
+pub(super) struct GestureControl {
+    pub(super) cursor: CursorController,
+    pub(super) window: WindowGestureController,
+    pub(super) keyboard: KeyboardController,
+    pub(super) pinch_sensitivity: f32,
 }
 
 #[derive(Default)]
@@ -87,9 +89,7 @@ impl CameraService {
         app: AppHandle,
         runtime: Arc<Mutex<RuntimeSnapshot>>,
         device_id: String,
-        cursor: CursorController,
-        window_control: WindowGestureController,
-        pinch_sensitivity: f32,
+        controls: GestureControl,
     ) -> Result<(), String> {
         let index = decode_camera_index(&device_id)?;
         let mut worker = self
@@ -115,18 +115,7 @@ impl CameraService {
         let thread = thread::Builder::new()
             .name("aircontrol-camera".to_owned())
             .spawn(move || {
-                capture_loop(
-                    app,
-                    runtime,
-                    index,
-                    worker_stop,
-                    worker_finished,
-                    GestureControl {
-                        cursor,
-                        window: window_control,
-                        pinch_sensitivity,
-                    },
-                );
+                capture_loop(app, runtime, index, worker_stop, worker_finished, controls);
             })
             .map_err(|error| format!("Camera worker could not be started: {error}"))?;
 
@@ -190,6 +179,7 @@ fn capture_loop(
     let GestureControl {
         cursor,
         window: window_control,
+        keyboard,
         pinch_sensitivity,
     } = controls;
     set_camera_state(&runtime, &app, CameraState::Starting, None);
@@ -236,6 +226,7 @@ fn capture_loop(
                 &finished,
                 &cursor,
                 &window_control,
+                &keyboard,
                 error.to_string(),
             );
             return;
@@ -249,6 +240,7 @@ fn capture_loop(
             &finished,
             &cursor,
             &window_control,
+            &keyboard,
             error.to_string(),
         );
         return;
@@ -267,6 +259,7 @@ fn capture_loop(
                     &finished,
                     &cursor,
                     &window_control,
+                    &keyboard,
                     error.to_string(),
                 );
                 return;
@@ -282,6 +275,9 @@ fn capture_loop(
                     let palms = match inference {
                         Some(Ok(palms)) => {
                             let has_pose = palms.iter().any(|palm| palm.finger_landmarks.is_some());
+                            if !has_pose {
+                                let _ = keyboard.reset_modifiers();
+                            }
                             let state = if has_pose {
                                 aircontrol_core::HandTrackingState::Detected
                             } else if palms.is_empty() {
@@ -309,6 +305,7 @@ fn capture_loop(
                                     );
                                     let _ = cursor.disable();
                                     let _ = window_control.disable();
+                                    let _ = keyboard.reset();
                                     set_control_disabled(&runtime, &app);
                                 }
                             }
@@ -324,6 +321,7 @@ fn capture_loop(
                                     );
                                     let _ = window_control.disable();
                                     let _ = cursor.disable();
+                                    let _ = keyboard.reset();
                                     set_control_disabled(&runtime, &app);
                                 }
                             }
@@ -338,6 +336,7 @@ fn capture_loop(
                             );
                             let _ = cursor.disable();
                             let _ = window_control.disable();
+                            let _ = keyboard.reset();
                             set_control_disabled(&runtime, &app);
                             set_tracking_state(
                                 &runtime,
@@ -349,6 +348,7 @@ fn capture_loop(
                             Vec::new()
                         }
                         None => {
+                            let _ = keyboard.reset_modifiers();
                             let _ = cursor.update_hand_landmarks(
                                 None,
                                 [image.width(), image.height()],
@@ -380,6 +380,7 @@ fn capture_loop(
     let _ = camera.stop_stream();
     let _ = cursor.disable();
     let _ = window_control.disable();
+    let _ = keyboard.reset();
     set_control_disabled(&runtime, &app);
     set_camera_state(&runtime, &app, CameraState::Stopped, None);
     finished.store(true, Ordering::Release);
@@ -412,10 +413,12 @@ fn fail_worker(
     finished: &AtomicBool,
     cursor: &CursorController,
     window_control: &WindowGestureController,
+    keyboard: &KeyboardController,
     message: String,
 ) {
     let _ = cursor.disable();
     let _ = window_control.disable();
+    let _ = keyboard.reset();
     set_control_disabled(runtime, app);
     set_camera_state(runtime, app, CameraState::Error, Some(message));
     finished.store(true, Ordering::Release);

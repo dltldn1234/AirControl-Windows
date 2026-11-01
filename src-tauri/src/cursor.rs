@@ -6,6 +6,7 @@ use aircontrol_core::gesture::{
     PinchAction, PinchRecognizer, PinchSource, RightClickRecognizer,
     choose_pinch_source_with_enabled, two_finger_scroll_position,
 };
+use aircontrol_core::keyboard::KeyboardTapRecognizer;
 use aircontrol_core::scroll::ScrollRecognizer;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -18,6 +19,7 @@ pub struct CursorController {
 #[derive(Default)]
 struct CursorState {
     enabled: bool,
+    keyboard_mode: bool,
     mirrored: bool,
     sensitivity: f32,
     smoothing: f32,
@@ -31,6 +33,7 @@ struct CursorState {
     reverse_scroll: bool,
     right_click_enabled: bool,
     filter: OneEuroCursorFilter,
+    keyboard_tap: KeyboardTapRecognizer,
 }
 
 impl CursorController {
@@ -72,6 +75,36 @@ impl CursorController {
         state.scroll.reset();
         state.active_pinch = None;
         state.enabled = true;
+        state.keyboard_mode = false;
+        Ok(())
+    }
+
+    pub fn enable_air_keyboard(
+        &self,
+        mirrored: bool,
+        sensitivity: f32,
+        smoothing: f32,
+    ) -> Result<(), String> {
+        let _ = current_virtual_desktop()?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "Cursor control is temporarily unavailable.".to_owned())?;
+        state.mirrored = mirrored;
+        state.sensitivity = if sensitivity.is_finite() {
+            sensitivity.clamp(0.5, 2.0)
+        } else {
+            1.0
+        };
+        state.smoothing = if smoothing.is_finite() {
+            smoothing.clamp(0.0, 0.9)
+        } else {
+            0.4
+        };
+        state.filter.reset();
+        state.keyboard_tap.reset();
+        state.keyboard_mode = true;
+        state.enabled = true;
         Ok(())
     }
 
@@ -81,6 +114,8 @@ impl CursorController {
             .lock()
             .map_err(|_| "Cursor control is temporarily unavailable.".to_owned())?;
         state.enabled = false;
+        state.keyboard_mode = false;
+        state.keyboard_tap.reset();
         let _ = state.pinch.reset();
         state.right_pinch.reset();
         state.active_pinch = None;
@@ -113,6 +148,32 @@ impl CursorController {
             return release_for_tracking_loss(&mut state);
         };
 
+        if state.keyboard_mode {
+            let pinch_distance = normalized_pinch_distance(&landmarks, 8);
+            let clicked = state.keyboard_tap.update(pinch_distance, Instant::now());
+            let desktop = current_virtual_desktop()?;
+            let smoothing = state.smoothing;
+            let Some(filtered) = state.filter.update(point, smoothing, Instant::now()) else {
+                return release_for_tracking_loss(&mut state);
+            };
+            let Some(sensitive) = apply_cursor_sensitivity(filtered, state.sensitivity) else {
+                return release_for_tracking_loss(&mut state);
+            };
+            let Some(screen_point) = map_normalized_cursor(sensitive, desktop, state.mirrored)
+            else {
+                return release_for_tracking_loss(&mut state);
+            };
+            let absolute = normalize_absolute_cursor(screen_point, desktop)
+                .ok_or_else(|| "The Windows virtual desktop has no usable area.".to_owned())?;
+            platform::move_cursor(absolute)?;
+            if clicked {
+                platform::left_button(true)?;
+                platform::left_button(false)?;
+                return Ok(PinchAction::Click);
+            }
+            return Ok(PinchAction::None);
+        }
+
         let action = update_gestures(&mut state, &landmarks, frame_size, pinch_sensitivity)?;
         if action == PinchAction::Scroll {
             return Ok(action);
@@ -141,6 +202,7 @@ impl CursorController {
 fn release_for_tracking_loss(state: &mut CursorState) -> Result<PinchAction, String> {
     let was_scrolling = state.scroll.is_active();
     state.filter.reset();
+    state.keyboard_tap.reset();
     let action = state.pinch.reset();
     state.right_pinch.reset();
     state.active_pinch = None;
