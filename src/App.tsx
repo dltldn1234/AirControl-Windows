@@ -21,7 +21,7 @@ import {
   Video,
   WandSparkles,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useRuntimeStore } from "./state/runtimeStore";
@@ -31,6 +31,7 @@ import type { UserPreferences } from "./domain/userPreferences";
 import type { WindowInfo } from "./domain/window";
 import { cameraLabel, canEnableCursorControl, gestureLabel, trackingLabel } from "./domain/runtimeStatus";
 import { commandKey, KEYBOARD_ROWS, type KeyboardKey } from "./keyboardLayout";
+import { INITIAL_KEYBOARD_FEEDBACK, reduceKeyboardFeedback } from "./keyboardFeedback";
 
 const HAND_CONNECTIONS: [number, number][] = [
   [0, 1], [1, 2], [2, 3], [3, 4],
@@ -406,9 +407,8 @@ function WindowControlSection({ connection, status }: { connection: "preview" | 
 }
 
 function AirKeyboardSurface() {
-  const [layout, setLayout] = useState<"english" | "korean">("english");
-  const [shift, setShift] = useState(false);
-  const [caps, setCaps] = useState(false);
+  const [feedback, dispatchFeedback] = useReducer(reduceKeyboardFeedback, INITIAL_KEYBOARD_FEEDBACK);
+  const { legend, shiftArmed } = feedback;
   const [error, setError] = useState<string | null>(null);
   const [tracking, setTracking] = useState<RuntimeSnapshot["handTracking"]>("waiting");
   const [modeActive, setModeActive] = useState(false);
@@ -431,14 +431,15 @@ function AirKeyboardSurface() {
       setTracking(snapshot.handTracking);
       setModeActive(snapshot.controlMode === "airKeyboard");
       if (snapshot.controlMode !== "airKeyboard") {
-        setLayout("english");
-        setShift(false);
-        setCaps(false);
+        dispatchFeedback({ type: "modeStopped" });
       }
     };
     void Promise.all([
       listen<RuntimeSnapshot>("runtime-status", (event) => syncStatus(event.payload)),
-      listen<{ state: RuntimeSnapshot["handTracking"] }>("hand-tracking-status", (event) => setTracking(event.payload.state)),
+      listen<{ state: RuntimeSnapshot["handTracking"] }>("hand-tracking-status", (event) => {
+        setTracking(event.payload.state);
+        dispatchFeedback({ type: "trackingChanged", tracking: event.payload.state });
+      }),
     ]).then(([runtimeListener, trackingListener]) => {
       if (disposed) { runtimeListener(); trackingListener(); }
       else {
@@ -456,9 +457,7 @@ function AirKeyboardSurface() {
     if (!isTauri()) return;
     try {
       await invoke("press_air_keyboard_key", { key: commandKey(key) });
-      if (key.id === "shift") setShift((value) => !value);
-      if (key.id === "caps") setCaps((value) => !value);
-      if (key.id === "layout") setLayout((value) => value === "english" ? "korean" : "english");
+      dispatchFeedback({ type: "keyAccepted", keyId: key.id });
       if (key.id !== "shift") setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Key input was rejected.");
@@ -471,17 +470,17 @@ function AirKeyboardSurface() {
 
   return (
     <main className="air-keyboard-window" aria-label="Air Keyboard">
-      <header className="air-keyboard-header" data-tauri-drag-region><div data-tauri-drag-region><span className="keyboard-live-dot" /><strong>Air Keyboard</strong><span className="keyboard-layout-label">{layout === "korean" ? "한글 두벌식" : "English QWERTY"}</span></div><button type="button" className="keyboard-close" aria-label="Stop Air Keyboard" onClick={() => void stopKeyboard()}>×</button></header>
-      <div className="air-keyboard-rows" role="group" aria-label={`${layout} keyboard layout`}>
+      <header className="air-keyboard-header" data-tauri-drag-region><div data-tauri-drag-region><span className="keyboard-live-dot" /><strong>Air Keyboard</strong><span className="keyboard-layout-label">Key labels · {legend === "korean" ? "Korean Dubeolsik" : "English QWERTY"}</span></div><button type="button" className="keyboard-close" aria-label="Stop Air Keyboard" onClick={() => void stopKeyboard()}>×</button></header>
+      <div className="air-keyboard-rows" role="group" aria-label={`${legend} keyboard key labels`}>
         {KEYBOARD_ROWS.map((row, rowIndex) => <div className="air-keyboard-row" key={rowIndex}>
-          {row.map((key) => <button type="button" key={key.id} data-key={key.id} className={`air-key ${key.kind ?? "letter"} ${((key.id === "shift" && shift) || (key.id === "caps" && caps)) ? "armed" : ""}`} style={{ flexGrow: key.width ?? 1 }} aria-label={key.id === "layout" ? "Toggle English or Korean input" : key.label} aria-pressed={key.id === "shift" ? shift : key.id === "caps" ? caps : undefined} disabled={!modeActive} onClick={() => void press(key)}>
-            <span>{layout === "korean" && key.korean ? key.korean : key.label}</span>
-            {key.korean && layout === "english" && <small>{key.korean}</small>}
+          {row.map((key) => <button type="button" key={key.id} data-key={key.id} className={`air-key ${key.kind ?? "letter"} ${key.id === "shift" && shiftArmed ? "armed" : ""}`} style={{ flexGrow: key.width ?? 1 }} aria-label={key.id === "layout" ? "Toggle English or Korean key labels" : key.label} aria-pressed={key.id === "shift" ? shiftArmed : undefined} disabled={!modeActive} onClick={() => void press(key)}>
+            <span>{legend === "korean" && key.korean ? key.korean : key.label}</span>
+            {key.korean && legend === "english" && <small>{key.korean}</small>}
             {key.shifted && <small className="shifted-legend">{key.shifted}</small>}
           </button>)}
         </div>)}
       </div>
-      <footer className="air-keyboard-footer"><span>{tracking === "detected" ? "Point with your index finger · pinch briefly to type" : "Hand tracking paused · waiting for a confident hand pose"}</span><span>Text is sent directly to the active app and is never stored.</span></footer>
+      <footer className="air-keyboard-footer"><span>{tracking === "detected" ? "Point with your index finger · pinch briefly to type" : "Hand tracking paused · waiting for a confident hand pose"}</span><span>Text is sent directly to the active app and is never stored. The key-label choice does not report the target app’s IME state.</span></footer>
       {error && <p className="air-keyboard-error" role="alert">{error}</p>}
     </main>
   );
@@ -495,7 +494,7 @@ function AirKeyboardSection({ connection, status }: { connection: "preview" | "c
     if (!isTauri() || (!enabled && !canEnable)) return;
     try {
       await invoke("set_air_keyboard_control", { enabled: !enabled });
-      setMessage(enabled ? "Air Keyboard stopped and temporary modifier state was cleared." : "Keyboard is active. The floating panel does not take keyboard focus from the target app.");
+      setMessage(enabled ? "Air Keyboard stopped and temporary modifier state was cleared." : "The panel is configured not to take keyboard focus. The target app’s IME state is not inspected.");
     } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
   }
   return <section className="keyboard-control-panel" aria-label="Air Keyboard controls">
@@ -505,7 +504,7 @@ function AirKeyboardSection({ connection, status }: { connection: "preview" | "c
     {!enabled && connection === "connected" && status?.camera !== "running" && <p className="keyboard-guidance">Start the camera from Camera &amp; tracking first. Hand control remains off until you start it here.</p>}
     {enabled && <p className="window-mode-status">Aim the hand cursor at the floating keyboard. Short pinches click once; a long pinch is ignored. Stop the camera or this mode to end input.</p>}
     <div className="keyboard-preview" aria-label="Keyboard preview"><span className="eyebrow">LAYOUT PREVIEW</span>{KEYBOARD_ROWS.slice(0, 3).map((row, index) => <div className="keyboard-preview-row" key={index}>{row.map((key) => <span key={key.id}>{key.label}</span>)}</div>)}</div>
-    <p className="keyboard-privacy-note">No typed characters are logged or saved. The layout toggle sends the Windows Hangul key; AirControl does not inspect IME changes made outside this panel.</p>
+    <p className="keyboard-privacy-note">No typed characters are logged or saved. English/Korean selects the key legends and sends the Windows Hangul key. AirControl does not read the target app’s current IME state; use that app’s input indicator to confirm it.</p>
     <p className="keyboard-status" role="status">{message}</p>
   </section>;
 }
