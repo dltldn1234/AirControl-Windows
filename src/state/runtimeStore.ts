@@ -2,7 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import type { CameraDevice } from "../domain/camera";
 import type { CameraState, HandTrackingState, RuntimeSnapshot } from "../domain/runtimeStatus";
-import type { UserPreferences } from "../domain/userPreferences";
+import { BUILT_IN_PROFILES, type UserPreferences } from "../domain/userPreferences";
 
 type RuntimeConnection = "preview" | "connected" | "error";
 
@@ -32,6 +32,8 @@ const initialPreferences: UserPreferences = {
   rightClickEnabled: true,
   cameraMirrored: true,
   appSwitchEnabled: false,
+  activeProfileId: "productivity",
+  profiles: BUILT_IN_PROFILES,
 };
 
 export const useRuntimeStore = create<RuntimeStore>((set) => ({
