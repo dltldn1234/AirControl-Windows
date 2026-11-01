@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+pub mod app_switch;
 pub mod cursor;
 pub mod filter;
 pub mod gesture;
