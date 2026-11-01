@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 pub mod cursor;
 pub mod filter;
 pub mod gesture;
+pub mod scroll;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -77,12 +78,14 @@ impl ControlReadiness {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(default)]
 pub struct UserPreferences {
     pub cursor_sensitivity: f32,
     pub cursor_smoothing: f32,
     pub pinch_sensitivity: f32,
     pub scroll_sensitivity: f32,
     pub reverse_scroll_direction: bool,
+    pub right_click_enabled: bool,
     pub camera_mirrored: bool,
 }
 
@@ -94,6 +97,7 @@ impl Default for UserPreferences {
             pinch_sensitivity: 1.0,
             scroll_sensitivity: 1.0,
             reverse_scroll_direction: false,
+            right_click_enabled: true,
             camera_mirrored: true,
         }
     }
