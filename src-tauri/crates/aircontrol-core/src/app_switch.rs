@@ -79,6 +79,37 @@ impl AppSwitchSwipeRecognizer {
     }
 }
 
+pub fn three_finger_swipe_position(
+    landmarks: &[[f32; 2]; 21],
+    frame_size: [u32; 2],
+    mirrored: bool,
+) -> Option<[f32; 2]> {
+    if frame_size.contains(&0) || landmarks.iter().flatten().any(|value| !value.is_finite()) {
+        return None;
+    }
+
+    let index = finger_is_extended(landmarks, 5, 6, 8);
+    let middle = finger_is_extended(landmarks, 9, 10, 12);
+    let ring = finger_is_extended(landmarks, 13, 14, 16);
+    let pinky = finger_is_extended(landmarks, 17, 18, 20);
+    if !(index && middle && ring && !pinky) {
+        return None;
+    }
+
+    let x = (landmarks[8][0] + landmarks[12][0] + landmarks[16][0]) / (3.0 * frame_size[0] as f32);
+    let y = (landmarks[8][1] + landmarks[12][1] + landmarks[16][1]) / (3.0 * frame_size[1] as f32);
+    Some([if mirrored { 1.0 - x } else { x }, y])
+}
+
+fn finger_is_extended(landmarks: &[[f32; 2]; 21], mcp: usize, pip: usize, tip: usize) -> bool {
+    let proximal = distance(landmarks[mcp], landmarks[pip]);
+    proximal > f32::EPSILON && distance(landmarks[mcp], landmarks[tip]) >= proximal * 1.45
+}
+
+fn distance(first: [f32; 2], second: [f32; 2]) -> f32 {
+    (first[0] - second[0]).hypot(first[1] - second[1])
+}
+
 #[cfg(test)]
 mod tests {
     use super::{AppSwitchSwipeRecognizer, SwipeDirection};
@@ -145,6 +176,40 @@ mod tests {
         );
         assert_eq!(
             recognizer.update(Some([0.5, 0.5]), start + Duration::from_millis(2_200)),
+            None
+        );
+    }
+
+    #[test]
+    fn swipe_pointer_requires_three_extended_fingers_and_applies_mirroring() {
+        use super::three_finger_swipe_position;
+
+        let mut landmarks = [[0.0, 0.0]; 21];
+        for (mcp, pip, tip, x) in [(5, 6, 8, 50.0), (9, 10, 12, 70.0), (13, 14, 16, 90.0)] {
+            landmarks[mcp] = [x, 100.0];
+            landmarks[pip] = [x, 80.0];
+            landmarks[tip] = [x, 40.0];
+        }
+        landmarks[17] = [100.0, 100.0];
+        landmarks[18] = [100.0, 80.0];
+        landmarks[20] = [100.0, 75.0];
+
+        assert_eq!(
+            three_finger_swipe_position(&landmarks, [200, 200], false),
+            Some([0.35, 0.2])
+        );
+        assert_eq!(
+            three_finger_swipe_position(&landmarks, [200, 200], true),
+            Some([0.65, 0.2])
+        );
+
+        landmarks[20] = [100.0, 30.0];
+        assert_eq!(
+            three_finger_swipe_position(&landmarks, [200, 200], false),
+            None
+        );
+        assert_eq!(
+            three_finger_swipe_position(&landmarks, [0, 200], false),
             None
         );
     }
