@@ -1,0 +1,64 @@
+# AirControl for Windows
+
+AirControl is a local-first Windows desktop application for controlling a PC with hand gestures. The Windows edition is built with Tauri 2, a Rust core, and a React + TypeScript interface.
+
+> **Development status:** this repository currently contains the desktop shell, runtime status bridge, local preference storage, and the initial dashboard. Camera capture, hand inference, and system input are not implemented yet. The UI marks unavailable features instead of simulating them. System control starts disabled.
+
+## Technology
+
+- Rust core and Tauri 2 commands
+- React, TypeScript, Vite, Tailwind CSS, and Zustand
+- Rust unit tests, Vitest, and Playwright
+- Windows native builds run in GitHub Actions on `windows-latest`
+
+## Requirements
+
+- Windows 10 or 11 x64 for native app development and runtime validation
+- Rust stable MSVC toolchain
+- Node.js 22 LTS and npm
+- Microsoft C++ Build Tools with the Desktop development with C++ workload
+- Microsoft Edge WebView2 Runtime
+
+Tauri uses WebView2 on Windows; Windows builds also require the Microsoft C++ build tools. See the [official Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
+
+## Development
+
+```powershell
+npm ci
+npm run tauri dev
+```
+
+Useful checks:
+
+```powershell
+cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+cargo test --workspace --manifest-path src-tauri/Cargo.toml
+cargo clippy --workspace --all-targets --manifest-path src-tauri/Cargo.toml -- -D warnings
+npm run build
+npm test
+npm run test:e2e
+```
+
+## Architecture
+
+- `src-tauri/crates/aircontrol-core`: platform-independent runtime states, safety gates, and preference models.
+- `src-tauri/src`: Tauri commands and Windows desktop integration services.
+- `src`: React screens, presentation state, and Tauri command calls.
+- `e2e`: browser-level UI checks; these do not replace testing the Windows WebView2 app.
+
+React does not generate operating-system input. Cursor, window, and keyboard control belongs in Rust services behind explicit readiness and user activation gates.
+
+## Privacy and safety
+
+- Camera frames and typed text must remain local and must not be logged.
+- Camera access and all system input are opt-in.
+- Cursor control requires an explicit user action and the required Windows permissions.
+- This foundation exposes no camera or input command yet.
+
+## License
+
+This repository is private and currently has an all-rights-reserved notice. No public redistribution license has been granted.
+
+## Validation boundary
+
+Frontend and portable Rust-core checks can run on macOS. A successful macOS check does not validate the Windows Tauri executable, WebView2, Windows camera capture, or native input. Windows build/package checks run in the repository's GitHub Actions workflow; camera and system-control behavior requires manual testing on a Windows PC.
