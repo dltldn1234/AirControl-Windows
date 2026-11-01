@@ -1,5 +1,7 @@
+use aircontrol_core::ActiveGesture;
 use aircontrol_core::window::{
-    WindowMoveRecognizer, WindowRect, WindowSizeLimits, move_window, resize_window,
+    WindowMoveRecognizer, WindowRect, WindowResizeRecognizer, WindowSizeLimits, move_window,
+    resize_window,
 };
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
@@ -27,6 +29,8 @@ struct WindowGestureState {
     sensitivity: f32,
     mirrored: bool,
     move_gesture: WindowMoveRecognizer,
+    resize_gesture: WindowResizeRecognizer,
+    resize_origin: Option<WindowRect>,
 }
 
 impl WindowGestureController {
@@ -49,6 +53,8 @@ impl WindowGestureController {
         };
         state.mirrored = mirrored;
         state.move_gesture.reset();
+        state.resize_gesture.reset();
+        state.resize_origin = None;
         Ok(())
     }
 
@@ -60,39 +66,97 @@ impl WindowGestureController {
         state.enabled = false;
         state.handle = None;
         state.move_gesture.reset();
+        state.resize_gesture.reset();
+        state.resize_origin = None;
         Ok(())
     }
 
-    /// Pinch the index finger and move it to reposition the explicitly selected window.
-    /// Tracking loss always ends the move gesture without applying a final delta.
+    /// A one-hand pinch moves the selected window; two index tips resize it symmetrically.
+    /// Tracking loss or a change in hand count ends the active gesture safely.
     pub fn update_hand_landmarks(
         &self,
-        landmarks: Option<[[f32; 2]; 21]>,
+        hands: &[Option<[[f32; 2]; 21]>],
         frame_size: [u32; 2],
         pinch_sensitivity: f32,
-    ) -> Result<bool, String> {
+    ) -> Result<ActiveGesture, String> {
         let mut state = self
             .state
             .lock()
             .map_err(|_| "Window control is temporarily unavailable.".to_owned())?;
         if !state.enabled {
-            return Ok(false);
+            return Ok(ActiveGesture::None);
         }
-        let Some(landmarks) = landmarks else {
+        if frame_size[0] == 0 || frame_size[1] == 0 {
             state.move_gesture.reset();
-            return Ok(false);
+            state.resize_gesture.reset();
+            state.resize_origin = None;
+            return Ok(ActiveGesture::None);
+        }
+
+        let valid_hands = hands
+            .iter()
+            .filter_map(|hand| *hand)
+            .filter(|landmarks| landmarks.iter().flatten().all(|value| value.is_finite()))
+            .take(2)
+            .collect::<Vec<_>>();
+
+        if valid_hands.len() >= 2 {
+            state.move_gesture.reset();
+            let mut positions = [valid_hands[0][8], valid_hands[1][8]];
+            for position in &mut positions {
+                position[0] = (position[0] / frame_size[0] as f32).clamp(0.0, 1.0);
+                position[1] = (position[1] / frame_size[1] as f32).clamp(0.0, 1.0);
+                if state.mirrored {
+                    position[0] = 1.0 - position[0];
+                }
+            }
+            let sensitivity = state.sensitivity;
+            let update = state.resize_gesture.update(Some(positions), sensitivity);
+            if update.active {
+                let handle = state
+                    .handle
+                    .ok_or_else(|| "No window is selected for gesture control.".to_owned())?;
+                let origin = match state.resize_origin {
+                    Some(origin) => origin,
+                    None => {
+                        let origin = platform::get_window(handle)?.rect;
+                        state.resize_origin = Some(origin);
+                        origin
+                    }
+                };
+                if let Some(scale) = update.scale {
+                    let target = resize_window(
+                        origin,
+                        scale,
+                        WindowSizeLimits {
+                            minimum: [320, 200],
+                            maximum: [8192, 8192],
+                        },
+                    )
+                    .ok_or_else(|| "The selected window could not be resized.".to_owned())?;
+                    platform::set_rect(handle, target)?;
+                }
+                return Ok(ActiveGesture::WindowResize);
+            }
+            state.resize_origin = None;
+            return Ok(ActiveGesture::None);
+        }
+
+        if state.resize_gesture.is_active() {
+            state.resize_gesture.reset();
+            state.resize_origin = None;
+            state.move_gesture.reset();
+            return Ok(ActiveGesture::None);
+        }
+
+        let Some(landmarks) = valid_hands.first().copied() else {
+            state.move_gesture.reset();
+            return Ok(ActiveGesture::None);
         };
-        if frame_size[0] == 0
-            || frame_size[1] == 0
-            || landmarks.iter().flatten().any(|value| !value.is_finite())
-        {
-            state.move_gesture.reset();
-            return Ok(false);
-        }
         let palm_size = window_point_distance(landmarks[0], landmarks[9]);
         if palm_size <= f32::EPSILON {
             state.move_gesture.reset();
-            return Ok(false);
+            return Ok(ActiveGesture::None);
         }
         let pinch_distance = window_point_distance(landmarks[4], landmarks[8]) / palm_size;
         let mut position = [
@@ -126,7 +190,11 @@ impl WindowGestureController {
                 .ok_or_else(|| "The selected window could not be moved.".to_owned())?;
             platform::set_rect(handle, target)?;
         }
-        Ok(update.active)
+        Ok(if update.active {
+            ActiveGesture::WindowMove
+        } else {
+            ActiveGesture::None
+        })
     }
 }
 
@@ -138,6 +206,8 @@ impl Drop for WindowGestureController {
             state.enabled = false;
             state.handle = None;
             state.move_gesture.reset();
+            state.resize_gesture.reset();
+            state.resize_origin = None;
         }
     }
 }

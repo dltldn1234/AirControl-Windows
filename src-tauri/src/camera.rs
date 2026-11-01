@@ -290,7 +290,13 @@ fn capture_loop(
                                 aircontrol_core::HandTrackingState::PalmDetected
                             };
                             set_tracking_state(&runtime, &app, state, None);
-                            let landmarks = palms.iter().find_map(|palm| palm.finger_landmarks);
+                            let tracked_hands = palms
+                                .iter()
+                                .filter_map(|palm| palm.finger_landmarks)
+                                .take(2)
+                                .map(Some)
+                                .collect::<Vec<_>>();
+                            let landmarks = tracked_hands.first().copied().flatten();
                             match cursor.update_hand_landmarks(
                                 landmarks,
                                 [image.width(), image.height()],
@@ -307,11 +313,11 @@ fn capture_loop(
                                 }
                             }
                             match window_control.update_hand_landmarks(
-                                landmarks,
+                                &tracked_hands,
                                 [image.width(), image.height()],
                                 pinch_sensitivity,
                             ) {
-                                Ok(moving) => crate::set_window_gesture(&runtime, &app, moving),
+                                Ok(gesture) => crate::set_window_gesture(&runtime, &app, gesture),
                                 Err(error) => {
                                     log::warn!(
                                         "Window control stopped after an input error: {error}"
@@ -349,11 +355,15 @@ fn capture_loop(
                                 pinch_sensitivity,
                             );
                             let _ = window_control.update_hand_landmarks(
-                                None,
+                                &[],
                                 [image.width(), image.height()],
                                 pinch_sensitivity,
                             );
-                            crate::set_window_gesture(&runtime, &app, false);
+                            crate::set_window_gesture(
+                                &runtime,
+                                &app,
+                                aircontrol_core::ActiveGesture::None,
+                            );
                             Vec::new()
                         }
                     };

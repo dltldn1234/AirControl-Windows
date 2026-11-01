@@ -17,6 +17,7 @@ describe("runtime status labels", () => {
     expect(trackingLabel("detected")).toBe("21 landmarks");
     expect(gestureLabel("rightClick")).toBe("Right click");
     expect(gestureLabel("windowMove")).toBe("Move window");
+    expect(gestureLabel("windowResize")).toBe("Resize window");
     expect(gestureLabel("none")).toBe("None");
   });
 

@@ -10,7 +10,7 @@ export type CameraState =
 
 export type HandTrackingState = "waiting" | "modelLoading" | "modelReady" | "palmDetected" | "detected" | "lost" | "error";
 export type ControlMode = "disabled" | "cursor" | "window" | "airKeyboard";
-export type ActiveGesture = "none" | "cursor" | "click" | "drag" | "scroll" | "rightClick" | "windowMove";
+export type ActiveGesture = "none" | "cursor" | "click" | "drag" | "scroll" | "rightClick" | "windowMove" | "windowResize";
 
 export interface RuntimeSnapshot {
   camera: CameraState;
@@ -61,5 +61,6 @@ export function gestureLabel(gesture: ActiveGesture): string {
   if (gesture === "none") return "None";
   if (gesture === "rightClick") return "Right click";
   if (gesture === "windowMove") return "Move window";
+  if (gesture === "windowResize") return "Resize window";
   return gesture.charAt(0).toUpperCase() + gesture.slice(1);
 }

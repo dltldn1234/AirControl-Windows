@@ -264,16 +264,12 @@ fn set_control_mode(runtime: &RuntimeState, app: &AppHandle, mode: aircontrol_co
 fn set_window_gesture(
     runtime: &std::sync::Arc<std::sync::Mutex<RuntimeSnapshot>>,
     app: &AppHandle,
-    moving: bool,
+    gesture: aircontrol_core::ActiveGesture,
 ) {
     if let Ok(mut snapshot) = runtime.lock()
         && snapshot.control_mode == aircontrol_core::ControlMode::Window
     {
-        snapshot.active_gesture = if moving {
-            aircontrol_core::ActiveGesture::WindowMove
-        } else {
-            aircontrol_core::ActiveGesture::None
-        };
+        snapshot.active_gesture = gesture;
         let _ = app.emit("runtime-status", snapshot.clone());
     }
 }
