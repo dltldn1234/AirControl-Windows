@@ -30,6 +30,7 @@ fn save_to_path(
     path: &std::path::Path,
     preferences: UserPreferences,
 ) -> Result<UserPreferences, String> {
+    preferences.validate_profiles()?;
     let parent = path
         .parent()
         .ok_or_else(|| "Preferences directory is unavailable.".to_owned())?;
@@ -115,6 +116,22 @@ mod tests {
         assert_eq!(
             std::fs::read(path).expect("preserved file"),
             b"not valid json"
+        );
+    }
+
+    #[test]
+    fn invalid_profiles_do_not_replace_the_last_saved_preferences() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let path = directory.path().join("preferences.json");
+        let existing = UserPreferences::default();
+        save_to_path(&path, existing.clone()).expect("initial save");
+        let mut invalid = existing;
+        invalid.profiles[0].name = invalid.profiles[1].name.clone();
+
+        assert!(save_to_path(&path, invalid).is_err());
+        assert_eq!(
+            load_from_path(&path).expect("preserved settings"),
+            UserPreferences::default()
         );
     }
 }
