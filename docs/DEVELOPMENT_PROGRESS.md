@@ -62,7 +62,7 @@
 
 ## Not implemented
 
-- Cursor, mouse gestures, window/app control, and Air Keyboard.
+- Window/app control, scrolling and right-click gestures, and Air Keyboard. Cursor movement, left-click, and drag dispatch are in the unmerged Issue #7 branch above.
 - Calibration, gesture customization, tray integration, and Windows packaging.
 - Windows PC hardware validation.
 
