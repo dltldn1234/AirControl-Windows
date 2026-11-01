@@ -1,3 +1,51 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CursorCalibration {
+    pub left: f32,
+    pub top: f32,
+    pub right: f32,
+    pub bottom: f32,
+}
+
+impl Default for CursorCalibration {
+    fn default() -> Self {
+        Self {
+            left: 0.0,
+            top: 0.0,
+            right: 1.0,
+            bottom: 1.0,
+        }
+    }
+}
+
+impl CursorCalibration {
+    pub fn normalized(self) -> Self {
+        const MINIMUM_SPAN: f32 = 0.15;
+        let valid = [self.left, self.top, self.right, self.bottom]
+            .iter()
+            .all(|value| value.is_finite() && (0.0..=1.0).contains(value))
+            && self.right - self.left >= MINIMUM_SPAN
+            && self.bottom - self.top >= MINIMUM_SPAN;
+        if valid { self } else { Self::default() }
+    }
+}
+
+pub fn apply_cursor_calibration(
+    point: [f32; 2],
+    calibration: CursorCalibration,
+) -> Option<[f32; 2]> {
+    if point.iter().any(|value| !value.is_finite()) {
+        return None;
+    }
+    let calibration = calibration.normalized();
+    Some([
+        ((point[0] - calibration.left) / (calibration.right - calibration.left)).clamp(0.0, 1.0),
+        ((point[1] - calibration.top) / (calibration.bottom - calibration.top)).clamp(0.0, 1.0),
+    ])
+}
+
 /// Pixel bounds of the complete Windows virtual desktop.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct VirtualDesktop {
@@ -93,8 +141,8 @@ fn normalize_axis(value: u32, maximum: u32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::{
-        ScreenPoint, VirtualDesktop, apply_cursor_sensitivity, map_normalized_cursor,
-        normalize_absolute_cursor,
+        CursorCalibration, ScreenPoint, VirtualDesktop, apply_cursor_calibration,
+        apply_cursor_sensitivity, map_normalized_cursor, normalize_absolute_cursor,
     };
 
     const DESKTOP: VirtualDesktop = VirtualDesktop {
@@ -208,6 +256,50 @@ mod tests {
         assert_eq!(
             apply_cursor_sensitivity([0.25, 0.75], 0.5),
             Some([0.375, 0.625])
+        );
+    }
+
+    #[test]
+    fn calibration_maps_user_range_to_full_display_and_clamps_outside_points() {
+        let calibration = CursorCalibration {
+            left: 0.2,
+            top: 0.1,
+            right: 0.8,
+            bottom: 0.9,
+        };
+        assert_eq!(
+            apply_cursor_calibration([0.2, 0.1], calibration),
+            Some([0.0, 0.0])
+        );
+        let center = apply_cursor_calibration([0.5, 0.5], calibration).unwrap();
+        assert!((center[0] - 0.5).abs() < f32::EPSILON);
+        assert!((center[1] - 0.5).abs() < f32::EPSILON);
+        assert_eq!(
+            apply_cursor_calibration([0.8, 0.9], calibration),
+            Some([1.0, 1.0])
+        );
+        assert_eq!(
+            apply_cursor_calibration([0.0, 1.0], calibration),
+            Some([0.0, 1.0])
+        );
+    }
+
+    #[test]
+    fn invalid_calibration_falls_back_to_full_camera_frame() {
+        let invalid = CursorCalibration {
+            left: 0.7,
+            top: 0.0,
+            right: 0.6,
+            bottom: 0.9,
+        };
+        assert_eq!(invalid.normalized(), CursorCalibration::default());
+        assert_eq!(
+            apply_cursor_calibration([0.3, 0.6], invalid),
+            Some([0.3, 0.6])
+        );
+        assert_eq!(
+            apply_cursor_calibration([f32::NAN, 0.5], CursorCalibration::default()),
+            None
         );
     }
 }
