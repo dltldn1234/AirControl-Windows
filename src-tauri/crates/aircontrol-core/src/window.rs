@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 const MINIMUM_TWO_HAND_DISTANCE: f32 = 0.08;
+const MAXIMUM_RESIZE_SCALE_STEP: f32 = 0.12;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,6 +50,7 @@ pub struct WindowResizeUpdate {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WindowResizeRecognizer {
     initial_distance: Option<f32>,
+    previous_scale: Option<f32>,
 }
 
 impl WindowResizeRecognizer {
@@ -58,6 +60,7 @@ impl WindowResizeRecognizer {
 
     pub fn reset(&mut self) {
         self.initial_distance = None;
+        self.previous_scale = None;
     }
 
     pub fn update(
@@ -81,6 +84,7 @@ impl WindowResizeRecognizer {
         }
         let Some(initial_distance) = self.initial_distance else {
             self.initial_distance = Some(distance);
+            self.previous_scale = Some(1.0);
             return WindowResizeUpdate {
                 active: true,
                 scale: None,
@@ -92,7 +96,13 @@ impl WindowResizeRecognizer {
             1.0
         };
         let relative_distance = distance / initial_distance;
-        let scale = (1.0 + (relative_distance - 1.0) * sensitivity).clamp(0.5, 2.0);
+        let desired_scale = (1.0 + (relative_distance - 1.0) * sensitivity).clamp(0.5, 2.0);
+        let previous_scale = self.previous_scale.unwrap_or(1.0);
+        let scale = desired_scale.clamp(
+            previous_scale - MAXIMUM_RESIZE_SCALE_STEP,
+            previous_scale + MAXIMUM_RESIZE_SCALE_STEP,
+        );
+        self.previous_scale = Some(scale);
         WindowResizeUpdate {
             active: true,
             scale: (scale - 1.0).abs().ge(&0.025).then_some(scale),
@@ -371,10 +381,10 @@ mod tests {
 
         let enlarged = recognizer.update(Some([[0.1, 0.5], [0.9, 0.5]]), 1.0);
         assert!(enlarged.active);
-        assert!((enlarged.scale.expect("distance increased") - 1.3333333).abs() < 0.00001);
+        assert!((enlarged.scale.expect("distance increased") - 1.12).abs() < 0.00001);
 
         let maximum = recognizer.update(Some([[0.0, 0.5], [1.0, 0.5]]), 2.0);
-        assert_eq!(maximum.scale, Some(2.0));
+        assert!((maximum.scale.expect("distance increased") - 1.24).abs() < 0.00001);
     }
 
     #[test]
