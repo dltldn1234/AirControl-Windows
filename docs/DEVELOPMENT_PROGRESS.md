@@ -5,7 +5,7 @@
 - Baseline commit count: 0 (empty repository at project start)
 - Current `main` commit count: 34 after the ordinary merge of PR #11.
 - Current issue: [#10 — Implement safe Windows window and app controls](https://github.com/dltldn1234/AirControl-Windows/issues/10)
-- Current branch: `10-feat/windows-window-controls` (12 commits ahead of `main`; 46 commits reachable from this branch HEAD after the current progress update).
+- Current branch: `10-feat/windows-window-controls` (14 commits ahead of `main`; 48 commits reachable from this branch HEAD after the current progress update).
 - Active stack: Rust, Tauri 2, React, TypeScript, Vite, Tailwind CSS
 
 ## Completed
@@ -96,5 +96,7 @@
 - Issue #10 local verification after two-hand resize: Rust workspace tests 59 passed, Clippy with warnings denied and formatting passed; frontend typecheck passed, Vitest 5 passed, Vite build passed, Playwright Chromium 3 passed. Windows API compilation awaits the Issue #10 PR checks; actual window behavior requires a Windows PC.
 - Two-hand resize uses a normalized-distance recognizer with a dead zone, sensitivity clamp, scale clamp, original-rectangle sizing, and immediate reset on tracking loss. The runtime status and Window Control instructions now identify resize mode.
 - Resize scale changes are limited to 0.12 per inference update to prevent abrupt size jumps if landmark positions shift. Core tests cover the cap.
-- Issue #10 is now rebased by a normal merge of the newly updated `main`; its PR will target `main` and contain only the window-control changes.
+- Issue #10 PR #12 is open as a draft against `main`, after a normal merge of the newly updated base; its diff contains only window-control changes.
+- While Window mode is active, the UI now locks target selection, refresh, and direct window actions, keeping the displayed target consistent with the native controller target.
+- PR #12 Windows CI is running for the latest pushed revision; its result must pass before merge.
 - Resize commits: `ccc3976` (core recognition), `ecd0dbb` (native integration and status UI), and `19724f0` (resize smoothing).
