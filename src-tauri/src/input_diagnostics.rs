@@ -50,15 +50,14 @@ mod platform {
         } != 0
         {
             let cpu = filetime_to_u64(kernel).saturating_add(filetime_to_u64(user));
-            let percent = previous.replace(cpu).and_then(|old| {
+            previous.replace(cpu).and_then(|old| {
                 let elapsed_100ns = elapsed.as_nanos() / 100;
                 let processor_count = processor_count().max(1) as u128;
                 (elapsed_100ns > 0).then(|| {
                     ((cpu.saturating_sub(old) as u128 * 100) / (elapsed_100ns * processor_count))
                         .min(100) as f32
                 })
-            });
-            percent
+            })
         } else {
             *previous = None;
             None
