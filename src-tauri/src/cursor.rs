@@ -1,6 +1,7 @@
 use aircontrol_core::cursor::{
     VirtualDesktop, apply_cursor_sensitivity, map_normalized_cursor, normalize_absolute_cursor,
 };
+use aircontrol_core::filter::OneEuroCursorFilter;
 use aircontrol_core::gesture::{PinchAction, PinchRecognizer};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -15,12 +16,14 @@ struct CursorState {
     enabled: bool,
     mirrored: bool,
     sensitivity: f32,
+    smoothing: f32,
     left_button_down: bool,
     pinch: PinchRecognizer,
+    filter: OneEuroCursorFilter,
 }
 
 impl CursorController {
-    pub fn enable(&self, mirrored: bool, sensitivity: f32) -> Result<(), String> {
+    pub fn enable(&self, mirrored: bool, sensitivity: f32, smoothing: f32) -> Result<(), String> {
         let _ = current_virtual_desktop()?;
         let mut state = self
             .state
@@ -32,6 +35,12 @@ impl CursorController {
         } else {
             1.0
         };
+        state.smoothing = if smoothing.is_finite() {
+            smoothing.clamp(0.0, 0.9)
+        } else {
+            0.4
+        };
+        state.filter.reset();
         state.enabled = true;
         Ok(())
     }
@@ -43,6 +52,7 @@ impl CursorController {
             .map_err(|_| "Cursor control is temporarily unavailable.".to_owned())?;
         state.enabled = false;
         let _ = state.pinch.reset();
+        state.filter.reset();
         release_left_button(&mut state)
     }
 
@@ -62,18 +72,25 @@ impl CursorController {
             return Ok(());
         }
         let Some(landmarks) = landmarks else {
+            state.filter.reset();
             let action = state.pinch.reset();
             dispatch_gesture_action(action, &mut state)?;
             return release_left_button(&mut state);
         };
         let Some(point) = normalized_landmark(landmarks[8], frame_size) else {
+            state.filter.reset();
             let action = state.pinch.reset();
             let _ = dispatch_gesture_action(action, &mut state);
             return release_left_button(&mut state);
         };
 
         let desktop = current_virtual_desktop()?;
-        let Some(sensitive_point) = apply_cursor_sensitivity(point, state.sensitivity) else {
+        let smoothing = state.smoothing;
+        let Some(filtered_point) = state.filter.update(point, smoothing, Instant::now()) else {
+            return release_left_button(&mut state);
+        };
+        let Some(sensitive_point) = apply_cursor_sensitivity(filtered_point, state.sensitivity)
+        else {
             return release_left_button(&mut state);
         };
         let Some(screen_point) = map_normalized_cursor(sensitive_point, desktop, state.mirrored)

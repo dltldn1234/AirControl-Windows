@@ -126,7 +126,11 @@ fn set_cursor_control(
             );
         }
         let preferences = settings::load(&app)?;
-        cursor.enable(preferences.camera_mirrored, preferences.cursor_sensitivity)?;
+        cursor.enable(
+            preferences.camera_mirrored,
+            preferences.cursor_sensitivity,
+            preferences.cursor_smoothing,
+        )?;
         set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Cursor);
     } else {
         cursor.disable()?;
