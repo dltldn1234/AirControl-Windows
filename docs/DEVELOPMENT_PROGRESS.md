@@ -7,7 +7,7 @@
 - Added normalized three-finger pose gating, horizontal swipe distance/velocity limits, cooldown, no-repeat-until-pose-release, tracking-loss reset, mirrored coordinate handling, and deterministic cycling among eligible visible windows.
 - Window control settings include an opt-in app-switch toggle. Foreground activation continues to use `SetForegroundWindow`; policy denial is logged and ignored without bypass.
 - Local verification: Rust workspace 73 tests passed, rustfmt and Clippy with warnings denied passed; frontend typecheck, 17 Vitest tests, and Vite production build passed. Windows CI and real application activation still need verification.
-- Next: complete Issue #19 documentation and review, push and open its PR, then wait for Windows CI before normal merge.
+- Next: push Issue #19 and open its PR, then wait for Windows CI before normal merge.
 
 ## Product roadmap toward 201+ meaningful commits
 
