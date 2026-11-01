@@ -1,5 +1,6 @@
 use crate::cursor::CursorController;
 use crate::hand_tracking::HandTrackingModels;
+use aircontrol_core::gesture::{PinchAction, next_cursor_gesture};
 use aircontrol_core::{CameraState, RuntimeSnapshot};
 use base64::Engine;
 use image::codecs::jpeg::JpegEncoder;
@@ -254,14 +255,19 @@ fn capture_loop(
                             };
                             set_tracking_state(&runtime, &app, state, None);
                             let landmarks = palms.iter().find_map(|palm| palm.finger_landmarks);
-                            if let Err(error) = cursor.update_hand_landmarks(
+                            match cursor.update_hand_landmarks(
                                 landmarks,
                                 [image.width(), image.height()],
                                 pinch_sensitivity,
                             ) {
-                                log::warn!("Cursor control stopped after an input error: {error}");
-                                let _ = cursor.disable();
-                                set_control_disabled(&runtime, &app);
+                                Ok(action) => set_cursor_gesture(&runtime, &app, action),
+                                Err(error) => {
+                                    log::warn!(
+                                        "Cursor control stopped after an input error: {error}"
+                                    );
+                                    let _ = cursor.disable();
+                                    set_control_disabled(&runtime, &app);
+                                }
                             }
                             palms
                         }
@@ -348,6 +354,18 @@ fn set_control_disabled(runtime: &Arc<Mutex<RuntimeSnapshot>>, app: &AppHandle) 
         snapshot.control_mode = aircontrol_core::ControlMode::Disabled;
         snapshot.active_gesture = aircontrol_core::ActiveGesture::None;
         let _ = app.emit("runtime-status", snapshot.clone());
+    }
+}
+
+fn set_cursor_gesture(runtime: &Arc<Mutex<RuntimeSnapshot>>, app: &AppHandle, action: PinchAction) {
+    if let Ok(mut snapshot) = runtime.lock()
+        && snapshot.control_mode == aircontrol_core::ControlMode::Cursor
+    {
+        let next = next_cursor_gesture(snapshot.active_gesture, action);
+        if next != snapshot.active_gesture {
+            snapshot.active_gesture = next;
+            let _ = app.emit("runtime-status", snapshot.clone());
+        }
     }
 }
 

@@ -63,39 +63,33 @@ impl CursorController {
         landmarks: Option<[[f32; 2]; 21]>,
         frame_size: [u32; 2],
         pinch_sensitivity: f32,
-    ) -> Result<(), String> {
+    ) -> Result<PinchAction, String> {
         let mut state = self
             .state
             .lock()
             .map_err(|_| "Cursor control is temporarily unavailable.".to_owned())?;
         if !state.enabled {
-            return Ok(());
+            return Ok(PinchAction::None);
         }
         let Some(landmarks) = landmarks else {
-            state.filter.reset();
-            let action = state.pinch.reset();
-            dispatch_gesture_action(action, &mut state)?;
-            return release_left_button(&mut state);
+            return release_for_tracking_loss(&mut state);
         };
         let Some(point) = normalized_landmark(landmarks[8], frame_size) else {
-            state.filter.reset();
-            let action = state.pinch.reset();
-            let _ = dispatch_gesture_action(action, &mut state);
-            return release_left_button(&mut state);
+            return release_for_tracking_loss(&mut state);
         };
 
         let desktop = current_virtual_desktop()?;
         let smoothing = state.smoothing;
         let Some(filtered_point) = state.filter.update(point, smoothing, Instant::now()) else {
-            return release_left_button(&mut state);
+            return release_for_tracking_loss(&mut state);
         };
         let Some(sensitive_point) = apply_cursor_sensitivity(filtered_point, state.sensitivity)
         else {
-            return release_left_button(&mut state);
+            return release_for_tracking_loss(&mut state);
         };
         let Some(screen_point) = map_normalized_cursor(sensitive_point, desktop, state.mirrored)
         else {
-            return release_left_button(&mut state);
+            return release_for_tracking_loss(&mut state);
         };
         let absolute = normalize_absolute_cursor(screen_point, desktop)
             .ok_or_else(|| "The Windows virtual desktop has no usable area.".to_owned())?;
@@ -105,8 +99,17 @@ impl CursorController {
         let action = state
             .pinch
             .update(normalized_pinch, pinch_sensitivity, Instant::now());
-        dispatch_gesture_action(action, &mut state)
+        dispatch_gesture_action(action, &mut state)?;
+        Ok(action)
     }
+}
+
+fn release_for_tracking_loss(state: &mut CursorState) -> Result<PinchAction, String> {
+    state.filter.reset();
+    let action = state.pinch.reset();
+    dispatch_gesture_action(action, state)?;
+    release_left_button(state)?;
+    Ok(action)
 }
 
 impl Drop for CursorController {
