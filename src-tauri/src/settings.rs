@@ -114,6 +114,8 @@ mod tests {
 
         assert!(parsed.right_click_enabled);
         assert!(!parsed.app_switch_enabled);
+        assert!(!parsed.auto_profile_enabled);
+        assert!(parsed.app_profile_rules.is_empty());
         assert_eq!(
             parsed.cursor_calibration,
             aircontrol_core::cursor::CursorCalibration::default()
