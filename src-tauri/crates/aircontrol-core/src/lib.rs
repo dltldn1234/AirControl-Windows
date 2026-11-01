@@ -4,6 +4,7 @@ pub mod cursor;
 pub mod filter;
 pub mod gesture;
 pub mod scroll;
+pub mod window;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -52,6 +53,7 @@ pub enum ActiveGesture {
     Drag,
     Scroll,
     RightClick,
+    WindowMove,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -83,6 +85,7 @@ pub struct UserPreferences {
     pub cursor_sensitivity: f32,
     pub cursor_smoothing: f32,
     pub pinch_sensitivity: f32,
+    pub window_sensitivity: f32,
     pub scroll_sensitivity: f32,
     pub reverse_scroll_direction: bool,
     pub right_click_enabled: bool,
@@ -95,6 +98,7 @@ impl Default for UserPreferences {
             cursor_sensitivity: 1.0,
             cursor_smoothing: 0.4,
             pinch_sensitivity: 1.0,
+            window_sensitivity: 1.0,
             scroll_sensitivity: 1.0,
             reverse_scroll_direction: false,
             right_click_enabled: true,
@@ -108,6 +112,7 @@ impl UserPreferences {
         self.cursor_sensitivity = finite_clamp(self.cursor_sensitivity, 0.5, 2.0, 1.0);
         self.cursor_smoothing = finite_clamp(self.cursor_smoothing, 0.0, 0.9, 0.4);
         self.pinch_sensitivity = finite_clamp(self.pinch_sensitivity, 0.6, 1.4, 1.0);
+        self.window_sensitivity = finite_clamp(self.window_sensitivity, 0.4, 2.0, 1.0);
         self.scroll_sensitivity = finite_clamp(self.scroll_sensitivity, 0.4, 3.0, 1.0);
         self
     }
@@ -165,6 +170,7 @@ mod tests {
             cursor_sensitivity: f32::INFINITY,
             cursor_smoothing: -4.0,
             pinch_sensitivity: 8.0,
+            window_sensitivity: 0.0,
             scroll_sensitivity: f32::NAN,
             ..UserPreferences::default()
         }
@@ -173,6 +179,7 @@ mod tests {
         assert_eq!(normalized.cursor_sensitivity, 1.0);
         assert_eq!(normalized.cursor_smoothing, 0.0);
         assert_eq!(normalized.pinch_sensitivity, 1.4);
+        assert_eq!(normalized.window_sensitivity, 0.4);
         assert_eq!(normalized.scroll_sensitivity, 1.0);
     }
 }
