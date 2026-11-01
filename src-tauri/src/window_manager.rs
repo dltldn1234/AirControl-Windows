@@ -8,6 +8,7 @@ use aircontrol_core::window::{
 };
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +36,8 @@ struct WindowGestureState {
     resize_gesture: WindowResizeRecognizer,
     resize_origin: Option<WindowRect>,
     app_switch_enabled: bool,
+    app_switch_sensitivity: f32,
+    app_switch_cooldown: Duration,
     app_switch_gesture: AppSwitchSwipeRecognizer,
 }
 
@@ -45,6 +48,8 @@ impl WindowGestureController {
         sensitivity: f32,
         mirrored: bool,
         app_switch_enabled: bool,
+        app_switch_sensitivity: f32,
+        app_switch_cooldown_ms: u64,
     ) -> Result<(), String> {
         let handle = parse_handle(handle)?;
         let target = platform::get_window(handle)?;
@@ -64,6 +69,13 @@ impl WindowGestureController {
         };
         state.mirrored = mirrored;
         state.app_switch_enabled = app_switch_enabled;
+        state.app_switch_sensitivity = if app_switch_sensitivity.is_finite() {
+            app_switch_sensitivity.clamp(0.6, 1.4)
+        } else {
+            1.0
+        };
+        state.app_switch_cooldown = Duration::from_millis(app_switch_cooldown_ms)
+            .clamp(Duration::from_millis(100), Duration::from_millis(2_000));
         state.app_switch_gesture.reset();
         state.move_gesture.reset();
         state.resize_gesture.reset();
@@ -176,9 +188,14 @@ impl WindowGestureController {
         if state.app_switch_enabled {
             let swipe_position =
                 three_finger_swipe_position(&landmarks, frame_size, state.mirrored);
-            let direction = state
-                .app_switch_gesture
-                .update(swipe_position, std::time::Instant::now());
+            let sensitivity = state.app_switch_sensitivity;
+            let cooldown = state.app_switch_cooldown;
+            let direction = state.app_switch_gesture.update_with_settings(
+                swipe_position,
+                std::time::Instant::now(),
+                sensitivity,
+                cooldown,
+            );
             if let Some(direction) = direction
                 && cycle_application(direction)?
             {

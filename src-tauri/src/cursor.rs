@@ -5,13 +5,14 @@ use aircontrol_core::cursor::{
 use aircontrol_core::filter::OneEuroCursorFilter;
 use aircontrol_core::gesture::{
     PinchAction, PinchRecognizer, PinchSource, RightClickRecognizer,
-    choose_pinch_source_with_enabled, two_finger_scroll_position,
+    choose_pinch_source_with_sensitivities, two_finger_scroll_position,
 };
+use aircontrol_core::gesture_studio::{GestureAction, GestureId, GestureStudioSettings};
 use aircontrol_core::keyboard::KeyboardBounds;
 use aircontrol_core::keyboard::KeyboardTapRecognizer;
 use aircontrol_core::scroll::ScrollRecognizer;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Default)]
 pub struct CursorController {
@@ -38,6 +39,7 @@ struct CursorState {
     right_click_enabled: bool,
     filter: OneEuroCursorFilter,
     keyboard_tap: KeyboardTapRecognizer,
+    gesture_studio: GestureStudioSettings,
 }
 
 pub struct CursorRuntimeSettings {
@@ -48,9 +50,32 @@ pub struct CursorRuntimeSettings {
     pub reverse_scroll: bool,
     pub right_click_enabled: bool,
     pub calibration: CursorCalibration,
+    pub gesture_studio: GestureStudioSettings,
 }
 
 impl CursorController {
+    /// Prepare for preview-only recognition without dispatching a release or
+    /// movement event. Reject entry if a real button could still be held.
+    pub fn prepare_safe_testing(&self) -> Result<(), String> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "Cursor control is temporarily unavailable.".to_owned())?;
+        if state.left_button_down || state.right_button_down {
+            return Err("Release the active mouse button before starting safe testing.".to_owned());
+        }
+        state.enabled = false;
+        state.keyboard_mode = false;
+        state.keyboard_bounds = None;
+        state.keyboard_tap.reset();
+        let _ = state.pinch.reset();
+        state.right_pinch.reset();
+        state.active_pinch = None;
+        state.scroll.reset();
+        state.filter.reset();
+        Ok(())
+    }
+
     pub fn enable(&self, settings: CursorRuntimeSettings) -> Result<(), String> {
         let _ = current_virtual_desktop()?;
         let mut state = self
@@ -76,6 +101,7 @@ impl CursorController {
         state.reverse_scroll = settings.reverse_scroll;
         state.right_click_enabled = settings.right_click_enabled;
         state.calibration = settings.calibration.normalized();
+        state.gesture_studio = settings.gesture_studio.normalized();
         let _ = state.pinch.reset();
         state.right_pinch.reset();
         state.filter.reset();
@@ -258,14 +284,24 @@ fn update_gestures(
     frame_size: [u32; 2],
     pinch_sensitivity: f32,
 ) -> Result<PinchAction, String> {
+    let index_binding = state.gesture_studio.binding(GestureId::IndexPinch);
+    let middle_binding = state.gesture_studio.binding(GestureId::MiddlePinch);
+    let index_sensitivity = pinch_sensitivity * index_binding.sensitivity;
+    let middle_sensitivity = pinch_sensitivity * middle_binding.sensitivity;
     let left_distance = normalized_pinch_distance(landmarks, 8);
     let right_distance = normalized_pinch_distance(landmarks, 12);
     let source = state.active_pinch.or_else(|| {
-        choose_pinch_source_with_enabled(
-            left_distance,
-            right_distance,
-            pinch_sensitivity,
-            state.right_click_enabled,
+        choose_pinch_source_with_sensitivities(
+            (index_binding.enabled() && index_binding.action != GestureAction::Disabled)
+                .then_some(left_distance)
+                .flatten(),
+            index_sensitivity,
+            (middle_binding.enabled()
+                && middle_binding.action == GestureAction::RightClick
+                && state.right_click_enabled)
+                .then_some(right_distance)
+                .flatten(),
+            middle_sensitivity,
         )
     });
 
@@ -274,19 +310,28 @@ fn update_gestures(
         match source {
             PinchSource::LeftClick => {
                 state.right_pinch.reset();
-                let action = state
-                    .pinch
-                    .update(left_distance, pinch_sensitivity, Instant::now());
+                let binding = state.gesture_studio.binding(GestureId::IndexPinch);
+                let action = state.pinch.update_with_timing(
+                    left_distance,
+                    index_sensitivity,
+                    Duration::from_millis(450),
+                    Duration::from_millis(binding.cooldown_ms),
+                    Instant::now(),
+                );
+                let action = mapped_index_action(binding.action, action);
                 dispatch_gesture_action(action, state)?;
                 state.active_pinch = state.pinch.is_active().then_some(PinchSource::LeftClick);
                 return Ok(action);
             }
             PinchSource::RightClick => {
                 let _ = state.pinch.reset();
-                let clicked =
-                    state
-                        .right_pinch
-                        .update(right_distance, pinch_sensitivity, Instant::now());
+                let binding = state.gesture_studio.binding(GestureId::MiddlePinch);
+                let clicked = state.right_pinch.update_with_cooldown(
+                    right_distance,
+                    middle_sensitivity,
+                    Duration::from_millis(binding.cooldown_ms),
+                    Instant::now(),
+                );
                 if clicked {
                     send_right_click(state)?;
                 }
@@ -304,11 +349,15 @@ fn update_gestures(
     }
 
     let was_scrolling = state.scroll.is_active();
-    let vertical_position = two_finger_scroll_position(landmarks, frame_size[1]);
+    let scroll_binding = state.gesture_studio.binding(GestureId::TwoFingerScroll);
+    let vertical_position = (scroll_binding.enabled()
+        && scroll_binding.action == GestureAction::Scroll)
+        .then(|| two_finger_scroll_position(landmarks, frame_size[1]))
+        .flatten();
     let update = state.scroll.update(
         vertical_position.is_some(),
         vertical_position,
-        state.scroll_sensitivity,
+        state.scroll_sensitivity * scroll_binding.sensitivity,
         state.reverse_scroll,
     );
     if update.active {
@@ -323,6 +372,19 @@ fn update_gestures(
         return Ok(PinchAction::Cursor);
     }
     Ok(PinchAction::None)
+}
+
+fn mapped_index_action(binding: GestureAction, action: PinchAction) -> PinchAction {
+    match (binding, action) {
+        (GestureAction::ClickAndDrag, action) => action,
+        (GestureAction::Click, PinchAction::Click) => PinchAction::Click,
+        (GestureAction::Drag, PinchAction::DragStart | PinchAction::DragEnd) => action,
+        (GestureAction::Disabled, _) => PinchAction::None,
+        (_, PinchAction::DragStart | PinchAction::DragEnd | PinchAction::Click) => {
+            PinchAction::None
+        }
+        (_, action) => action,
+    }
 }
 
 impl Drop for CursorController {
@@ -507,6 +569,9 @@ mod platform {
             },
         };
         let sent = unsafe { SendInput(1, &input, size_of::<INPUT>() as i32) };
+        if sent > 0 {
+            crate::input_diagnostics::record_input_events(sent as usize);
+        }
         if sent == 1 {
             Ok(())
         } else {
@@ -557,6 +622,41 @@ mod tests {
         controller
             .update_hand_landmarks(None, [640, 480], 1.0)
             .expect("disabled cursor control must not send system input");
+    }
+
+    #[test]
+    fn safe_test_preparation_disables_cursor_dispatch_without_releasing_buttons() {
+        let controller = CursorController::default();
+        {
+            let mut state = controller.state.lock().expect("cursor state");
+            state.enabled = true;
+            state.left_button_down = false;
+            state.right_button_down = false;
+        }
+
+        controller
+            .prepare_safe_testing()
+            .expect("idle cursor can enter preview-only mode");
+
+        let state = controller.state.lock().expect("cursor state");
+        assert!(!state.enabled);
+        assert!(!state.left_button_down);
+        assert!(!state.right_button_down);
+    }
+
+    #[test]
+    fn safe_test_preparation_refuses_to_repair_a_potentially_held_button_with_input() {
+        let controller = CursorController::default();
+        {
+            let mut state = controller.state.lock().expect("cursor state");
+            state.enabled = true;
+            state.left_button_down = true;
+        }
+
+        assert!(controller.prepare_safe_testing().is_err());
+        let state = controller.state.lock().expect("cursor state");
+        assert!(state.enabled);
+        assert!(state.left_button_down);
     }
 
     #[test]
