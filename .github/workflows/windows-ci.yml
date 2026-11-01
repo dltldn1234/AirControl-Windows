@@ -1,0 +1,63 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Build and test on Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.99.1
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --workspace --locked
+
+      - name: Run Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --locked -- -D warnings
+
+      - name: Type-check and build frontend
+        run: npm run build
+
+      - name: Run frontend unit tests
+        run: npm test
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Run frontend browser tests
+        run: npm run test:e2e
+
+      - name: Build Windows desktop executable
+        run: npm run tauri build -- --no-bundle

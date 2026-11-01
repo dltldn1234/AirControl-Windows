@@ -1,0 +1,32 @@
+name: Bug report
+description: Report a reproducible defect
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and reproduction
+      description: Include Windows version, hardware, steps, and relevant safe logs.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I have removed private data, typed content, and credentials from logs.
+          required: true
