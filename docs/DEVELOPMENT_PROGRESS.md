@@ -1,5 +1,16 @@
 # Development Progress
 
+## Current state (2026-11-01, Issue #15)
+
+- `main` baseline: 59 commits at `4380f5343b55a449f02cbb7035a60f5a14c3fc56` (PR #14 merge); Issue #15 branch `15-fix/keyboard-state` is isolated from the original dirty checkout.
+- Issue: [#15 — Keep Air Keyboard modifier feedback accurate after tracking loss](https://github.com/dltldn1234/AirControl-Windows/issues/15).
+- Removed AirControl's local Caps Lock state because it cannot represent the target app's global Windows toggle state. The key still emits the Caps Lock virtual key.
+- Shift feedback now follows native keyboard session transitions and clears when tracking is lost; accepted keys, layout selection, and mode stop share a tested feedback reducer.
+- English/Korean is labeled as a keycap legend selection. UI copy states that AirControl does not inspect the foreground application's IME state and directs users to that application's indicator.
+- Local verification: Rust workspace 68 tests passed, rustfmt passed, Clippy with warnings denied passed; frontend typecheck passed, Vitest 16 passed, Vite production build passed, Playwright Chromium 4 passed.
+- Windows CI and manual Windows overlay/focus, global Caps Lock, and Korean IME behavior remain to be verified.
+- This branch has 3 implementation/test commits and 3 progress-documentation commits (6 total) on the 59-commit main baseline.
+
 ## Current state (2026-11-01, Issue #13)
 
 - `main` baseline: 50 commits at `f16f47cdf3af38948ee155e99c5e98185fd0e7fc` (PR #12 merge); Issue #13 branch `13-feat/air-keyboard` began from that head.

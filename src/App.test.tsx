@@ -36,8 +36,10 @@ describe("AirControl desktop shell", () => {
       render(<App />);
       expect(screen.getByRole("main", { name: "Air Keyboard" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "A" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Toggle English or Korean input" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Toggle English or Korean key labels" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Stop Air Keyboard" })).toBeInTheDocument();
+      expect(screen.getByText(/does not report the target app’s IME state/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Caps" })).not.toHaveAttribute("aria-pressed");
     } finally {
       window.history.replaceState({}, "", window.location.pathname);
     }
