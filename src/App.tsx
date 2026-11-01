@@ -26,7 +26,7 @@ import { useEffect, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useRuntimeStore } from "./state/runtimeStore";
 import type { RuntimeSnapshot } from "./domain/runtimeStatus";
-import type { CameraDevice, CameraFrame, CameraStatusEvent } from "./domain/camera";
+import type { CameraDevice, CameraFrame, CameraStatusEvent, HandTrackingStatusEvent } from "./domain/camera";
 import type { UserPreferences } from "./domain/userPreferences";
 import { cameraLabel, gestureLabel, trackingLabel } from "./domain/runtimeStatus";
 
@@ -157,19 +157,23 @@ function PlannedSection({ title }: { title: string }) {
 function CameraSection({
   connection,
   cameraState,
+  handTrackingState,
   error,
   listCameras,
   startCamera,
   stopCamera,
   setCameraState,
+  setHandTrackingState,
 }: {
   connection: "preview" | "connected" | "error";
   cameraState: RuntimeSnapshot["camera"] | "unavailable";
+  handTrackingState: RuntimeSnapshot["handTracking"];
   error: string | null;
   listCameras: () => Promise<CameraDevice[] | null>;
   startCamera: (deviceId: string) => Promise<boolean>;
   stopCamera: () => Promise<boolean>;
   setCameraState: (state: RuntimeSnapshot["camera"]) => void;
+  setHandTrackingState: (state: RuntimeSnapshot["handTracking"]) => void;
 }) {
   const [cameras, setCameras] = useState<CameraDevice[]>([]);
   const [selectedCamera, setSelectedCamera] = useState("");
@@ -183,6 +187,7 @@ function CameraSection({
     let disposed = false;
     let unlistenFrame: UnlistenFn | undefined;
     let unlistenStatus: UnlistenFn | undefined;
+    let unlistenTracking: UnlistenFn | undefined;
     void listen<CameraFrame>("camera-frame", (event) => {
       setFrame(event.payload);
     }).then((unlisten) => {
@@ -197,12 +202,20 @@ function CameraSection({
       if (disposed) unlisten();
       else unlistenStatus = unlisten;
     });
+    void listen<HandTrackingStatusEvent>("hand-tracking-status", (event) => {
+      setHandTrackingState(event.payload.state);
+      if (event.payload.message) setMessage(event.payload.message);
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else unlistenTracking = unlisten;
+    });
     return () => {
       disposed = true;
       unlistenFrame?.();
       unlistenStatus?.();
+      unlistenTracking?.();
     };
-  }, [canUseCamera, setCameraState]);
+  }, [canUseCamera, setCameraState, setHandTrackingState]);
 
   async function refreshCameras() {
     setLoading(true);
@@ -240,6 +253,7 @@ function CameraSection({
       </div>
       <div className="camera-controls">
         <div className="camera-controls-heading"><div><h2>Camera source</h2><p>Choose a local camera to see a live preview.</p></div><span className={`camera-state-pill ${cameraState}`}>{cameraLabel(cameraState)}</span></div>
+        <div className="camera-tracking-status" role="status"><strong>Hand tracking</strong><span>{trackingLabel(handTrackingState)}</span><small>{handTrackingState === "modelReady" ? "Models are loaded locally; live landmark inference is still in development." : "Hand landmark inference is not active."}</small></div>
         <label className="camera-select-label" htmlFor="camera-device">Available cameras</label>
         <select id="camera-device" value={selectedCamera} disabled={!canUseCamera || cameras.length === 0 || cameraState === "running"} onChange={(event) => setSelectedCamera(event.currentTarget.value)}>
           {cameras.length === 0 ? <option value="">Search for cameras first</option> : cameras.map((camera) => <option key={camera.id} value={camera.id}>{camera.name}</option>)}
@@ -294,7 +308,7 @@ function SettingsSection({
 
 export default function App() {
   const [activeSection, setActiveSection] = useState("Overview");
-  const { status, preferences, connection, error, refresh, savePreferences, listCameras, startCamera, stopCamera, setCameraState } = useRuntimeStore();
+  const { status, preferences, connection, error, refresh, savePreferences, listCameras, startCamera, stopCamera, setCameraState, setHandTrackingState } = useRuntimeStore();
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -322,7 +336,7 @@ export default function App() {
         <header className="topbar"><div className="breadcrumbs"><span>AirControl</span><ChevronRight size={14} /><strong>{activeSection}</strong></div><div className="topbar-actions"><span className={`runtime-chip ${connection}`}><span />{connection === "connected" ? "Runtime connected" : "Preview mode"}</span><button className="icon-button" type="button" aria-label="Keyboard shortcuts"><Command size={16} /></button><span className="topbar-avatar">D</span></div></header>
         <div className="content-scroll">
           <div className="page-title-row"><div><div className="eyebrow page-eyebrow">{activeSection === "Overview" ? "YOUR WORKSPACE" : "AIRCONTROL"}</div><h1>{activeSection}</h1><p>{sectionDescriptions[activeSection]}</p></div>{activeSection === "Overview" ? <button className="primary-button" type="button" disabled title="Camera and control services are not available yet"><span className="button-status" /> Start control <ArrowUpRight size={15} /></button> : <span className="phase-badge">FOUNDATION PHASE</span>}</div>
-          {activeSection === "Overview" ? <Overview status={status} /> : activeSection === "Settings" ? <SettingsSection connection={connection} initialPreferences={preferences} savePreferences={savePreferences} /> : activeSection === "Camera & tracking" ? <CameraSection connection={connection} cameraState={status?.camera ?? "unavailable"} error={error} listCameras={listCameras} startCamera={startCamera} stopCamera={stopCamera} setCameraState={setCameraState} /> : <PlannedSection title={activeSection} />}
+          {activeSection === "Overview" ? <Overview status={status} /> : activeSection === "Settings" ? <SettingsSection connection={connection} initialPreferences={preferences} savePreferences={savePreferences} /> : activeSection === "Camera & tracking" ? <CameraSection connection={connection} cameraState={status?.camera ?? "unavailable"} handTrackingState={status?.handTracking ?? "waiting"} error={error} listCameras={listCameras} startCamera={startCamera} stopCamera={stopCamera} setCameraState={setCameraState} setHandTrackingState={setHandTrackingState} /> : <PlannedSection title={activeSection} />}
           <footer className="page-footer"><span>AirControl for Windows <span className="footer-divider">·</span> Foundation build</span><span>Local processing <span className="footer-divider">·</span> No cloud connection</span></footer>
         </div>
       </main>

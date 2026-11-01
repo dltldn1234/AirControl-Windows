@@ -8,7 +8,7 @@ export type CameraState =
   | "unavailable"
   | "error";
 
-export type HandTrackingState = "waiting" | "detected" | "lost";
+export type HandTrackingState = "waiting" | "modelLoading" | "modelReady" | "detected" | "lost" | "error";
 export type ControlMode = "disabled" | "cursor" | "window" | "airKeyboard";
 export type ActiveGesture = "none" | "cursor" | "click" | "drag" | "scroll" | "rightClick";
 
@@ -38,8 +38,11 @@ export function cameraLabel(state: CameraState | "unavailable"): string {
 export function trackingLabel(state: HandTrackingState): string {
   const labels: Record<HandTrackingState, string> = {
     waiting: "Waiting",
+    modelLoading: "Loading model",
+    modelReady: "Model loaded",
     detected: "Hand detected",
     lost: "Tracking lost",
+    error: "Model error",
   };
   return labels[state];
 }

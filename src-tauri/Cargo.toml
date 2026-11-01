@@ -35,6 +35,7 @@ tempfile = "3"
 nokhwa = { version = "0.10.11", features = ["input-native"] }
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 base64 = "0.22"
+ort = { version = "2.0.0-rc.15", default-features = true }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

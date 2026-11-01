@@ -11,6 +11,7 @@ describe("runtime status labels", () => {
 
   it("presents tracking loss and gesture names clearly", () => {
     expect(trackingLabel("lost")).toBe("Tracking lost");
+    expect(trackingLabel("modelReady")).toBe("Model loaded");
     expect(gestureLabel("rightClick")).toBe("Right click");
     expect(gestureLabel("none")).toBe("None");
   });

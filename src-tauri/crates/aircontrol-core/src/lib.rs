@@ -19,8 +19,11 @@ pub enum CameraState {
 pub enum HandTrackingState {
     #[default]
     Waiting,
+    ModelLoading,
+    ModelReady,
     Detected,
     Lost,
+    Error,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]

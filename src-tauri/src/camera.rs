@@ -1,3 +1,4 @@
+use crate::hand_tracking::HandTrackingModels;
 use aircontrol_core::{CameraState, RuntimeSnapshot};
 use base64::Engine;
 use image::codecs::jpeg::JpegEncoder;
@@ -131,6 +132,12 @@ impl CameraService {
             }
         }
         set_camera_state(runtime, app, CameraState::Stopped, None);
+        set_tracking_state(
+            runtime,
+            app,
+            aircontrol_core::HandTrackingState::Waiting,
+            None,
+        );
         Ok(())
     }
 }
@@ -156,6 +163,33 @@ fn capture_loop(
     finished: Arc<AtomicBool>,
 ) {
     set_camera_state(&runtime, &app, CameraState::Starting, None);
+    set_tracking_state(
+        &runtime,
+        &app,
+        aircontrol_core::HandTrackingState::ModelLoading,
+        None,
+    );
+    let _hand_models = match HandTrackingModels::load() {
+        Ok(models) => {
+            set_tracking_state(
+                &runtime,
+                &app,
+                aircontrol_core::HandTrackingState::ModelReady,
+                Some("ONNX models loaded; live landmark inference is not connected yet."),
+            );
+            Some(models)
+        }
+        Err(error) => {
+            set_tracking_state(
+                &runtime,
+                &app,
+                aircontrol_core::HandTrackingState::Error,
+                Some(&error),
+            );
+            log::error!("Hand tracking models could not be loaded: {error}");
+            None
+        }
+    };
     let requested =
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::Closest(CameraFormat::new(
             Resolution::new(PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT),
@@ -240,6 +274,21 @@ fn set_camera_state(
         snapshot.camera = state;
     }
     let _ = app.emit(CAMERA_STATUS_EVENT, CameraStatusEvent { state, message });
+}
+
+fn set_tracking_state(
+    runtime: &Arc<Mutex<RuntimeSnapshot>>,
+    app: &AppHandle,
+    state: aircontrol_core::HandTrackingState,
+    message: Option<&str>,
+) {
+    if let Ok(mut snapshot) = runtime.lock() {
+        snapshot.hand_tracking = state;
+    }
+    let _ = app.emit(
+        "hand-tracking-status",
+        serde_json::json!({ "state": state, "message": message }),
+    );
 }
 
 fn encode_camera_index(index: &CameraIndex) -> String {

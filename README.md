@@ -2,7 +2,7 @@
 
 AirControl is a local-first Windows desktop application for controlling a PC with hand gestures. The Windows edition is built with Tauri 2, a Rust core, and a React + TypeScript interface.
 
-> **Development status:** the desktop shell, runtime status bridge, local preference storage, dashboard, and opt-in native camera enumeration/preview are implemented. Hand inference and system input are not implemented yet. The UI marks unavailable features instead of simulating them. System control starts disabled.
+> **Development status:** the desktop shell, runtime status bridge, local preference storage, dashboard, and opt-in native camera enumeration/preview are implemented. Bundled ONNX palm and landmark models can be loaded by the Rust core; live inference and landmark display are still in development. System input remains disabled.
 
 ## Technology
 
@@ -55,7 +55,8 @@ React does not generate operating-system input. Cursor, window, and keyboard con
 - Cursor control requires an explicit user action and the required Windows permissions.
 - Camera access is requested only when the user searches for devices; capture is stopped when the user stops the preview or the app exits.
 - Camera frames are resized and kept in memory for the live preview. They are not saved or sent to a server.
-- Hand inference and system input commands are not implemented yet.
+- ONNX model weights are bundled for local processing; see [model notices](docs/MODEL_NOTICES.md). Live hand inference is not yet connected to camera frames.
+- System input commands are not implemented yet.
 
 ## License
 

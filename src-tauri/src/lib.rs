@@ -5,6 +5,7 @@ use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_log::{Target, TargetKind};
 
 mod camera;
+mod hand_tracking;
 mod settings;
 
 #[derive(Clone, Default)]
