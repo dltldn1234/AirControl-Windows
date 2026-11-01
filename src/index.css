@@ -4,6 +4,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 860px; min-height: 100vh; }
 body.keyboard-surface { min-width: 0; overflow: hidden; }
+html.keyboard-surface,body.keyboard-surface { background:transparent; }
 button { font: inherit; }
 button:focus-visible,input:focus-visible { outline: 2px solid #83a9f5; outline-offset: 2px; }
 .app-shell { display: flex; min-height: 100vh; background: #111318; }
@@ -210,7 +211,7 @@ h1 { margin-bottom:5px; color:#f1f2f5; font-size:24px; font-weight:610; letter-s
 .keyboard-preview>.eyebrow { margin-bottom:2px; }
 .keyboard-preview-row { display:flex; justify-content:center; gap:5px; }
 .keyboard-preview-row span { display:grid; place-items:center; min-width:28px; height:25px; padding:0 5px; border:1px solid #383d47; border-radius:4px; color:#c9ced8; background:#252830; font-size:9px; }
-.air-keyboard-window { box-sizing:border-box; display:flex; flex-direction:column; min-height:100vh; padding:12px 14px 9px; color:#e7eaf0; background:linear-gradient(145deg,#20242bef,#13161bea); border:1px solid #454b56; }
+.air-keyboard-window { box-sizing:border-box; display:flex; flex-direction:column; min-height:100vh; padding:12px 14px 9px; color:#e7eaf0; background:linear-gradient(145deg,#20242bef,#13161bea); border:1px solid #454b56; border-radius:10px; }
 .air-keyboard-header { display:flex; align-items:center; justify-content:space-between; min-height:27px; margin-bottom:8px; }
 .air-keyboard-header,[data-tauri-drag-region] { cursor:grab; }
 .air-keyboard-header>div { display:flex; align-items:center; gap:8px; }

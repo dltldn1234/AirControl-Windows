@@ -415,7 +415,11 @@ function AirKeyboardSurface() {
 
   useEffect(() => {
     document.body.classList.add("keyboard-surface");
-    return () => document.body.classList.remove("keyboard-surface");
+    document.documentElement.classList.add("keyboard-surface");
+    return () => {
+      document.body.classList.remove("keyboard-surface");
+      document.documentElement.classList.remove("keyboard-surface");
+    };
   }, []);
 
   useEffect(() => {
@@ -432,15 +436,18 @@ function AirKeyboardSurface() {
         setCaps(false);
       }
     };
-    void invoke<RuntimeSnapshot>("get_runtime_status").then((snapshot) => {
-      if (!disposed) syncStatus(snapshot);
-    }).catch(() => undefined);
     void Promise.all([
       listen<RuntimeSnapshot>("runtime-status", (event) => syncStatus(event.payload)),
       listen<{ state: RuntimeSnapshot["handTracking"] }>("hand-tracking-status", (event) => setTracking(event.payload.state)),
     ]).then(([runtimeListener, trackingListener]) => {
       if (disposed) { runtimeListener(); trackingListener(); }
-      else { stopRuntime = runtimeListener; stopTracking = trackingListener; }
+      else {
+        stopRuntime = runtimeListener;
+        stopTracking = trackingListener;
+        void invoke<RuntimeSnapshot>("get_runtime_status").then((snapshot) => {
+          if (!disposed) syncStatus(snapshot);
+        }).catch(() => undefined);
+      }
     });
     return () => { disposed = true; stopRuntime?.(); stopTracking?.(); };
   }, []);
@@ -498,7 +505,7 @@ function AirKeyboardSection({ connection, status }: { connection: "preview" | "c
     {!enabled && connection === "connected" && status?.camera !== "running" && <p className="keyboard-guidance">Start the camera from Camera &amp; tracking first. Hand control remains off until you start it here.</p>}
     {enabled && <p className="window-mode-status">Aim the hand cursor at the floating keyboard. Short pinches click once; a long pinch is ignored. Stop the camera or this mode to end input.</p>}
     <div className="keyboard-preview" aria-label="Keyboard preview"><span className="eyebrow">LAYOUT PREVIEW</span>{KEYBOARD_ROWS.slice(0, 3).map((row, index) => <div className="keyboard-preview-row" key={index}>{row.map((key) => <span key={key.id}>{key.label}</span>)}</div>)}</div>
-    <p className="keyboard-privacy-note">No typed characters are logged or saved. Korean composition follows the active Windows IME; the Korean layout toggle sends the Windows Hangul key.</p>
+    <p className="keyboard-privacy-note">No typed characters are logged or saved. The layout toggle sends the Windows Hangul key; AirControl does not inspect IME changes made outside this panel.</p>
     <p className="keyboard-status" role="status">{message}</p>
   </section>;
 }

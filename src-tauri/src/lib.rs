@@ -321,6 +321,7 @@ fn show_air_keyboard(app: &AppHandle) -> Result<(), String> {
     .inner_size(760.0, 304.0)
     .min_inner_size(560.0, 270.0)
     .decorations(false)
+    .transparent(true)
     .always_on_top(true)
     .skip_taskbar(true)
     .focusable(false)
