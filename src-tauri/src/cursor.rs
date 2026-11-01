@@ -92,6 +92,7 @@ impl CursorController {
         mirrored: bool,
         sensitivity: f32,
         smoothing: f32,
+        calibration: CursorCalibration,
         bounds: KeyboardBounds,
     ) -> Result<(), String> {
         if !bounds.is_usable() {
@@ -113,6 +114,7 @@ impl CursorController {
         } else {
             0.4
         };
+        state.calibration = calibration.normalized();
         state.filter.reset();
         state.keyboard_tap.reset();
         state.keyboard_bounds = Some(bounds);

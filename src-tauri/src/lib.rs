@@ -267,6 +267,7 @@ fn set_air_keyboard_control(
             preferences.camera_mirrored,
             preferences.cursor_sensitivity,
             preferences.cursor_smoothing,
+            preferences.cursor_calibration,
             bounds,
         ) {
             if let Some(window) = app.get_webview_window("air-keyboard") {
