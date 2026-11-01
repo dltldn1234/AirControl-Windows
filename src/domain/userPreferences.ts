@@ -11,9 +11,16 @@ export interface UserPreferences {
   cursorCalibration: { left: number; top: number; right: number; bottom: number };
   activeProfileId: string;
   profiles: ControlProfile[];
+  autoProfileEnabled: boolean;
+  appProfileRules: AppProfileRule[];
 }
 
-export type ProfileSettings = Omit<UserPreferences, "activeProfileId" | "profiles" | "cursorCalibration">;
+export interface AppProfileRule {
+  executable: string;
+  profileId: string;
+}
+
+export type ProfileSettings = Omit<UserPreferences, "activeProfileId" | "profiles" | "cursorCalibration" | "autoProfileEnabled" | "appProfileRules">;
 
 export interface ControlProfile {
   id: string;
@@ -88,10 +95,10 @@ export function deleteControlProfile(preferences: UserPreferences, id: string): 
   const profile = preferences.profiles.find((item) => item.id === id);
   if (!profile || profile.builtIn) throw new Error("Built-in profiles cannot be deleted.");
   const profiles = preferences.profiles.filter((item) => item.id !== id);
-  if (preferences.activeProfileId !== id) return { ...preferences, profiles };
+  if (preferences.activeProfileId !== id) return { ...preferences, profiles, appProfileRules: preferences.appProfileRules.filter((rule) => rule.profileId !== id) };
   const fallback = profiles.find((item) => item.id === "productivity");
   if (!fallback) throw new Error("The Productivity profile is unavailable.");
-  return withProfileSettings({ ...preferences, profiles }, fallback);
+  return withProfileSettings({ ...preferences, profiles, appProfileRules: preferences.appProfileRules.filter((rule) => rule.profileId !== id) }, fallback);
 }
 
 export function restoreControlProfile(preferences: UserPreferences, id: string): UserPreferences {
@@ -101,4 +108,36 @@ export function restoreControlProfile(preferences: UserPreferences, id: string):
   const restored = { ...profile, settings: { ...preset.settings } };
   const next = { ...preferences, profiles: preferences.profiles.map((item) => item.id === id ? restored : item) };
   return preferences.activeProfileId === id ? withProfileSettings(next, restored) : next;
+}
+
+export function normalizeExecutableIdentity(value: string): string | null {
+  const segments = value.trim().split(/[\\/]/);
+  const fileName = (segments[segments.length - 1] ?? "").toLowerCase();
+  return fileName.length > 0 && fileName.length <= 260 && /^[^\\/:*?\"<>|\u0000-\u001f]+\.exe$/.test(fileName) ? fileName : null;
+}
+
+export function upsertAppProfileRule(
+  preferences: UserPreferences,
+  executable: string,
+  profileId: string,
+): UserPreferences {
+  const identity = normalizeExecutableIdentity(executable);
+  if (!identity) throw new Error("Enter a Windows executable name ending in .exe.");
+  if (!preferences.profiles.some((profile) => profile.id === profileId)) {
+    throw new Error("Choose an existing control profile.");
+  }
+  return {
+    ...preferences,
+    appProfileRules: [
+      ...preferences.appProfileRules.filter((rule) => normalizeExecutableIdentity(rule.executable) !== identity),
+      { executable: identity, profileId },
+    ],
+  };
+}
+
+export function removeAppProfileRule(preferences: UserPreferences, executable: string): UserPreferences {
+  const identity = normalizeExecutableIdentity(executable);
+  return identity
+    ? { ...preferences, appProfileRules: preferences.appProfileRules.filter((rule) => normalizeExecutableIdentity(rule.executable) !== identity) }
+    : preferences;
 }

@@ -58,6 +58,18 @@ test("control profiles are visible but unavailable without the native runtime", 
   await expect(page.getByRole("button", { name: "Save current as profile" })).toBeDisabled();
 });
 
+test("application profile mappings remain opt-in and disabled in browser preview", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings" }).click();
+
+  await expect(page.getByText("Application profiles")).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: /Automatically select a profile/ })).not.toBeChecked();
+  await expect(page.getByRole("checkbox", { name: /Automatically select a profile/ })).toBeDisabled();
+  await expect(page.getByRole("textbox", { name: "Windows executable name" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Add or update" })).toBeDisabled();
+  await expect(page.getByText("No application mappings yet.")).toBeVisible();
+});
+
 test("Air Keyboard preview exposes the layout without sending system key events", async ({ page }) => {
   await page.goto("/?surface=keyboard");
 

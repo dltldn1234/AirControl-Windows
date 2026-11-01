@@ -28,7 +28,7 @@ import { useRuntimeStore } from "./state/runtimeStore";
 import type { RuntimeSnapshot } from "./domain/runtimeStatus";
 import { DEFAULT_CURSOR_CALIBRATION, moveCalibrationEdge } from "./domain/cursorCalibration";
 import type { CameraDevice, CameraFrame, CameraStatusEvent, HandTrackingStatusEvent } from "./domain/camera";
-import { createControlProfile, deleteControlProfile, renameControlProfile, restoreControlProfile, withProfileSettings, type ControlProfile, type UserPreferences } from "./domain/userPreferences";
+import { createControlProfile, deleteControlProfile, normalizeExecutableIdentity, removeAppProfileRule, renameControlProfile, restoreControlProfile, upsertAppProfileRule, withProfileSettings, type ControlProfile, type UserPreferences } from "./domain/userPreferences";
 import type { WindowInfo } from "./domain/window";
 import { cameraLabel, canEnableCursorControl, gestureLabel, trackingLabel } from "./domain/runtimeStatus";
 import { commandKey, KEYBOARD_ROWS, type KeyboardKey } from "./keyboardLayout";
@@ -316,13 +316,20 @@ function SettingsSection({
   const [preferences, setPreferences] = useState(initialPreferences);
   const [saveState, setSaveState] = useState("Changes apply only after saving.");
   const [newProfileName, setNewProfileName] = useState("");
+  const [appExecutable, setAppExecutable] = useState("");
+  const [appProfileId, setAppProfileId] = useState(initialPreferences.activeProfileId);
   const [renameValue, setRenameValue] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const runtimeAvailable = connection === "connected";
   const canSave = runtimeAvailable && !isSaving;
   const activeProfile = preferences.profiles.find((profile) => profile.id === preferences.activeProfileId);
+  const runtimeProfileId = useRuntimeStore((state) => state.status?.activeProfileId ?? null);
+  const runtimeProfile = preferences.profiles.find((profile) => profile.id === runtimeProfileId);
 
-  useEffect(() => setPreferences(initialPreferences), [initialPreferences]);
+  useEffect(() => {
+    setPreferences(initialPreferences);
+    setAppProfileId(initialPreferences.activeProfileId);
+  }, [initialPreferences]);
 
   async function save() {
     if (!canSave) return;
@@ -408,12 +415,27 @@ function SettingsSection({
     });
   }
 
+  async function saveAppRule() {
+    try {
+      const next = upsertAppProfileRule(preferences, appExecutable, appProfileId);
+      if (await saveProfileUpdate(next, `${normalizeExecutableIdentity(appExecutable)} will use the selected profile when its control mode starts.`)) {
+        setAppExecutable("");
+      }
+    } catch (error) {
+      setSaveState(error instanceof Error ? error.message : "Application profile could not be saved.");
+    }
+  }
+
+  async function removeAppRule(executable: string) {
+    await saveProfileUpdate(removeAppProfileRule(preferences, executable), `Automatic profile removed for ${executable}.`);
+  }
+
   return (
     <section className="settings-panel">
       <div className="settings-intro"><span className="planned-icon"><Settings2 size={20} aria-hidden="true" /></span><div><h2>Control preferences</h2><p>Preferences are stored locally. System control remains off when AirControl starts.</p></div></div>
       {!runtimeAvailable && <RuntimeUnavailable />}
       <div className="profile-settings">
-        <div className="profile-settings-heading"><div><strong>Control profiles</strong><small>Profiles store gesture sensitivity and behavior on this PC. Selecting one never starts system control.</small></div><span>{activeProfile?.name ?? "No profile"}</span></div>
+        <div className="profile-settings-heading"><div><strong>Control profiles</strong><small>Profiles store gesture sensitivity and behavior on this PC. Selecting one never starts system control.</small></div><span>{runtimeProfile ? `${runtimeProfile.name} · active` : activeProfile?.name ?? "No profile"}</span></div>
         <div className="profile-choice-list" role="group" aria-label="Control profile">
           {preferences.profiles.map((profile) => <button type="button" key={profile.id} className={`profile-choice${profile.id === preferences.activeProfileId ? " selected" : ""}`} aria-label={`${profile.name}, ${profile.builtIn ? "built-in preset" : "custom profile"}`} aria-pressed={profile.id === preferences.activeProfileId} disabled={!canSave} onClick={() => void selectProfile(profile)}><strong>{profile.name}</strong><small>{profile.builtIn ? "Built-in preset" : "Your profile"}</small></button>)}
         </div>
@@ -427,6 +449,16 @@ function SettingsSection({
           </>}
           {activeProfile?.builtIn && <button type="button" className="secondary-button" disabled={!canSave} onClick={() => void restoreProfile()}>Restore preset</button>}
         </div>
+      </div>
+      <div className="profile-settings app-profile-settings">
+        <div className="profile-settings-heading"><div><strong>Application profiles</strong><small>Choose an executable-to-profile mapping. Only the executable name is saved; selection occurs when a control mode starts.</small></div></div>
+        <label className="app-profile-toggle"><input type="checkbox" checked={preferences.autoProfileEnabled} disabled={!canSave} onChange={(event) => void saveProfileUpdate({ ...preferences, autoProfileEnabled: event.currentTarget.checked }, event.currentTarget.checked ? "Automatic profile selection enabled." : "Automatic profile selection disabled.")} /><span><strong>Automatically select a profile</strong><small>Does not turn on cursor, window, or keyboard control.</small></span></label>
+        <div className="app-profile-editor">
+          <label className="profile-name-field"><span className="sr-only">Windows executable name</span><input aria-label="Windows executable name" maxLength={260} value={appExecutable} disabled={!canSave} placeholder="Application.exe" onChange={(event) => setAppExecutable(event.currentTarget.value)} /></label>
+          <label><span className="sr-only">Profile for application</span><select aria-label="Profile for application" value={appProfileId} disabled={!canSave} onChange={(event) => setAppProfileId(event.currentTarget.value)}>{preferences.profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label>
+          <button type="button" className="secondary-button" disabled={!canSave || !appExecutable.trim() || preferences.appProfileRules.length >= 64 && !preferences.appProfileRules.some((rule) => normalizeExecutableIdentity(rule.executable) === normalizeExecutableIdentity(appExecutable))} onClick={() => void saveAppRule()}>Add or update</button>
+        </div>
+        {preferences.appProfileRules.length === 0 ? <p className="app-profile-empty">No application mappings yet.</p> : <ul className="app-profile-list">{preferences.appProfileRules.map((rule) => <li key={rule.executable}><code>{rule.executable}</code><span>{preferences.profiles.find((profile) => profile.id === rule.profileId)?.name ?? "Unavailable profile"}</span><select aria-label={`Profile for ${rule.executable}`} value={rule.profileId} disabled={!canSave} onChange={(event) => { try { void saveProfileUpdate(upsertAppProfileRule(preferences, rule.executable, event.currentTarget.value), `${rule.executable} profile updated.`); } catch (error) { setSaveState(error instanceof Error ? error.message : "Application profile could not be saved."); } }}>{preferences.profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select><button type="button" className="secondary-button danger-button" disabled={!canSave} aria-label={`Remove ${rule.executable} mapping`} onClick={() => void removeAppRule(rule.executable)}>Remove</button></li>)}</ul>}
       </div>
       <label className="setting-control"><span><strong>Cursor sensitivity</strong><small>Adjust movement gain after calibration.</small></span><span className="range-control"><input aria-label="Cursor sensitivity" type="range" min="0.5" max="2" step="0.1" value={preferences.cursorSensitivity} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, cursorSensitivity: Number(event.currentTarget.value) })} /><output>{preferences.cursorSensitivity.toFixed(1)}×</output></span></label>
       <label className="setting-control"><span><strong>Cursor smoothing</strong><small>Balance steady motion and responsiveness.</small></span><span className="range-control"><input aria-label="Cursor smoothing" type="range" min="0" max="0.9" step="0.05" value={preferences.cursorSmoothing} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, cursorSmoothing: Number(event.currentTarget.value) })} /><output>{preferences.cursorSmoothing.toFixed(2)}</output></span></label>

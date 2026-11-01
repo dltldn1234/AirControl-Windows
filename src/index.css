@@ -126,6 +126,20 @@ h1 { margin-bottom:5px; color:#f1f2f5; font-size:24px; font-weight:610; letter-s
 .profile-choice strong { font-size:11px; font-weight:590; }
 .profile-choice small { color:#858b96; font-size:9px; }
 .profile-actions { display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin-top:10px; }
+.app-profile-settings { border-bottom:0; }
+.app-profile-toggle { display:flex; align-items:center; gap:10px; padding:11px 0; color:#d9dce4; }
+.app-profile-toggle input { accent-color:#a88bd3; }
+.app-profile-toggle strong,.app-profile-toggle small { display:block; }
+.app-profile-toggle strong { font-size:11px; font-weight:550; }
+.app-profile-toggle small { margin-top:3px; color:#858b96; font-size:9px; }
+.app-profile-editor { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:7px 0 10px; }
+.app-profile-editor select,.app-profile-list select { min-height:29px; padding:0 8px; border:1px solid #353840; border-radius:5px; background:#17191e; color:#d9dce4; font:inherit; font-size:10px; }
+.app-profile-empty { margin:6px 0 10px; color:#858b96; font-size:10px; }
+.app-profile-list { display:grid; gap:7px; margin:0; padding:0; list-style:none; }
+.app-profile-list li { display:grid; grid-template-columns:minmax(100px,1fr) minmax(80px,auto) minmax(110px,150px) auto; align-items:center; gap:10px; padding:8px 0; border-top:1px solid #292c33; }
+.app-profile-list code { color:#d7d1e2; font:10px ui-monospace,SFMono-Regular,monospace; }
+.app-profile-list span { color:#858b96; font-size:9px; }
+.app-profile-list button { justify-self:end; }
 .profile-name-field input { width:138px; height:29px; padding:0 8px; border:1px solid #353840; border-radius:5px; background:#14161a; color:#e7e9ef; font:inherit; font-size:10px; }
 .profile-name-field input:focus-visible,.profile-choice:focus-visible,.secondary-button:focus-visible { outline:2px solid #9b7bd0; outline-offset:2px; }
 .secondary-button { min-height:29px; padding:0 9px; border:1px solid #383b44; border-radius:5px; background:#22242a; color:#c5c9d2; font-size:10px; cursor:pointer; }
@@ -133,6 +147,7 @@ h1 { margin-bottom:5px; color:#f1f2f5; font-size:24px; font-weight:610; letter-s
 .secondary-button:disabled,.profile-choice:disabled { cursor:not-allowed; opacity:.5; }
 .danger-button { color:#e2a5a5; }
 @media (max-width: 620px) { .profile-settings-heading { flex-direction:column; } .profile-actions { align-items:stretch; } .profile-name-field input { width:100%; } }
+@media (max-width: 620px) { .app-profile-list li { grid-template-columns:1fr auto; } .app-profile-list li > span { display:none; } .app-profile-list li > select { grid-column:1; } .app-profile-list li > button { grid-column:2; grid-row:2; } }
 .settings-intro { display:flex; align-items:center; gap:13px; padding-bottom:19px; border-bottom:1px solid #2d3038; }
 .settings-intro .planned-icon { flex:none; margin:0; }
 .settings-intro h2 { margin:0 0 5px; color:#e7e9ef; font-size:15px; font-weight:590; }
