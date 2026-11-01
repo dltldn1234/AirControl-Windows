@@ -1,12 +1,34 @@
 # Development Progress
 
-## Current state (2026-11-01, Issue #17)
+## Current state (2026-11-01, Issue #19)
 
-- `main` has 66 commits at `9324912` after PR #16 merged. Issue #17 is on `17-feat/hand-association`, based on current `main`; three implementation/test commits are currently ahead.
-- Issue: [#17 — Keep tracked hand identities stable across camera frames](https://github.com/dltldn1234/AirControl-Windows/issues/17).
+- Directive baseline: 71 commits on `main` at `bb17403`; 130 additional meaningful commits would be needed to reach 201. This is a target, not a reason to create filler commits.
+- Issue: [#19 — Implement gesture-driven app switching](https://github.com/dltldn1234/AirControl-Windows/issues/19). Branch `19-feat/gesture-app-switching` is based on current `main` and has four local commits, not yet pushed.
+- Added normalized three-finger pose gating, horizontal swipe distance/velocity limits, cooldown, no-repeat-until-pose-release, tracking-loss reset, mirrored coordinate handling, and deterministic cycling among eligible visible windows.
+- Window control settings include an opt-in app-switch toggle. Foreground activation continues to use `SetForegroundWindow`; policy denial is logged and ignored without bypass.
+- Local verification: Rust workspace 73 tests passed, rustfmt and Clippy with warnings denied passed; frontend typecheck, 17 Vitest tests, and Vite production build passed. Windows CI and real application activation still need verification.
+- Next: complete Issue #19 documentation and review, push and open its PR, then wait for Windows CI before normal merge.
+
+## Product roadmap toward 201+ meaningful commits
+
+The 130-commit gap is expected to come from the following independently testable product work, not a per-commit quota. Scope each item as an Issue, then split implementation, safety behavior, UI wiring, tests, and documentation only when each part has a distinct purpose.
+
+- Camera and tracking reliability: device reconnect, frame backpressure, inference timing, low-confidence handling, long-run resource release, lighting checks, and tracking recovery.
+- Adaptive gesture engine: feature extraction, temporal confidence, pinch calibration, drag and scroll conflict resolution, configurable cooldowns, gesture profiles, and replayable landmark fixtures.
+- Cursor and spatial control: monitor/DPI mapping tests, cursor filter tuning, window-boundary behavior, safe target refresh, resize limits, activation policy failures, and app-switching regression coverage.
+- Air Keyboard and IME: non-activating overlay focus checks, key repeat, modifier release, target IME guidance, language/layout selection semantics, hit-test scaling, and Windows manual-test procedures.
+- Calibration and profiles: calibration persistence/versioning, onboarding, reset/restore, per-profile settings, profile import/export validation, and automatic-profile safety.
+- Product UI: dashboard health states, camera selection, gesture configuration, calibration flow, performance details, command palette, tray menu, keyboard navigation, accessibility names, and responsive layouts.
+- Reliability, QA, and release: native integration seams, deterministic tests, Playwright workflows, Windows CI artifact checks, installer/signing readiness documentation, upgrade behavior, diagnostics, privacy review, and troubleshooting coverage.
+
+Only changes that improve behavior, safety, maintainability, or verifiable quality will be committed. If the real backlog cannot produce 201 commits without padding, report the remaining gap instead of manufacturing work.
+
+## Previous state (Issue #17)
+
+- Issue: [#17 — Keep tracked hand identities stable across camera frames](https://github.com/dltldn1234/AirControl-Windows/issues/17); PR #18 merged normally at `bb17403` after Windows CI run [41288181630](https://github.com/dltldn1234/AirControl-Windows/actions/runs/41288181630) passed.
 - Added a two-track wrist-center associator with bounded nearest-neighbor matching, short velocity prediction, two-frame loss tolerance, and reset behavior. Camera routing now binds landmarks to stable track slots instead of detector confidence order, and falls back to the remaining live hand without reusing stale landmarks.
 - Local verification: Rust workspace 75 tests passed, rustfmt passed, Clippy with warnings denied passed. Manual camera crossing/reacquisition, cursor hand continuity, and window resize checks remain Windows PC checks.
-- Next: push the branch, validate Windows CI, and open/merge the Issue #17 PR if checks pass.
+- Issue #17 contributed four branch commits on the 66-commit baseline; merge commit brought `main` to 71 commits.
 
 ## Previous state (Issue #15)
 
@@ -93,17 +115,17 @@
 - Phase 7 window control: merged through PR #12; real window behavior needs a Windows PC.
 - Phase 4 ONNX hand tracking: merged through PR #6 after successful Windows CI; actual webcam landmark quality still needs a Windows PC check.
 
-## Not implemented
+## Not implemented or awaiting hardware verification
 
-- Gesture-driven app switching is not implemented; the Window panel can activate a user-selected eligible window.
+- Gesture-driven app switching is in progress in Issue #19; the current main only activates a user-selected eligible window.
 - Calibration, gesture customization, tray integration, and Windows packaging remain unimplemented.
 - Air Keyboard physical IME/focus behavior and hand tracking quality need Windows PC validation.
 - Windows PC hardware validation.
 
 ## Next
 
-1. Finish and submit Issue #17 for Windows CI review.
-2. Implement gesture-driven app switching in a separate issue.
+1. Finish and submit Issue #19 for Windows CI review.
+2. Continue with calibration and gesture customization as separate issues.
 3. Validate camera, cursor, click, scroll, resize, Air Keyboard IME/focus, and tracking continuity on a Windows PC; this macOS host cannot provide that evidence.
 
 ## Follow-up (2026-11-01, Issue #9)
