@@ -27,7 +27,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useRuntimeStore } from "./state/runtimeStore";
 import type { RuntimeSnapshot } from "./domain/runtimeStatus";
 import type { CameraDevice, CameraFrame, CameraStatusEvent, HandTrackingStatusEvent } from "./domain/camera";
-import { BUILT_IN_PROFILES, isValidProfileName, withProfileSettings, type ControlProfile, type UserPreferences } from "./domain/userPreferences";
+import { createControlProfile, deleteControlProfile, renameControlProfile, restoreControlProfile, withProfileSettings, type ControlProfile, type UserPreferences } from "./domain/userPreferences";
 import type { WindowInfo } from "./domain/window";
 import { cameraLabel, canEnableCursorControl, gestureLabel, trackingLabel } from "./domain/runtimeStatus";
 import { commandKey, KEYBOARD_ROWS, type KeyboardKey } from "./keyboardLayout";
@@ -341,60 +341,44 @@ function SettingsSection({
   }
 
   async function createProfile() {
-    const name = newProfileName.trim();
-    if (!isValidProfileName(name, preferences.profiles)) {
-      setSaveState("Use a unique profile name with 1–32 characters.");
-      return;
-    }
-    const profile: ControlProfile = {
-      id: crypto.randomUUID(),
-      name,
-      builtIn: false,
-      settings: {
-        cursorSensitivity: preferences.cursorSensitivity,
-        cursorSmoothing: preferences.cursorSmoothing,
-        pinchSensitivity: preferences.pinchSensitivity,
-        windowSensitivity: preferences.windowSensitivity,
-        scrollSensitivity: preferences.scrollSensitivity,
-        reverseScrollDirection: preferences.reverseScrollDirection,
-        rightClickEnabled: preferences.rightClickEnabled,
-        cameraMirrored: preferences.cameraMirrored,
-        appSwitchEnabled: preferences.appSwitchEnabled,
-      },
-    };
-    const next = withProfileSettings({ ...preferences, profiles: [...preferences.profiles, profile] }, profile);
-    if (await saveProfileUpdate(next, `${name} profile created.`)) {
+    try {
+      const next = createControlProfile(preferences, newProfileName, crypto.randomUUID());
+      const name = newProfileName.trim();
+      if (await saveProfileUpdate(next, `${name} profile created.`)) {
       setNewProfileName("");
       setRenameValue("");
+      }
+    } catch (error) {
+      setSaveState(error instanceof Error ? error.message : "Profile could not be created.");
     }
   }
 
   async function renameProfile() {
     if (!activeProfile || activeProfile.builtIn) return;
-    const name = renameValue.trim();
-    if (!isValidProfileName(name, preferences.profiles, activeProfile.id)) {
-      setSaveState("Use a unique profile name with 1–32 characters.");
-      return;
+    try {
+      const name = renameValue.trim();
+      if (await saveProfileUpdate(renameControlProfile(preferences, activeProfile.id, name), `Profile renamed to ${name}.`)) setRenameValue("");
+    } catch (error) {
+      setSaveState(error instanceof Error ? error.message : "Profile could not be renamed.");
     }
-    const profiles = preferences.profiles.map((profile) => profile.id === activeProfile.id ? { ...profile, name } : profile);
-    if (await saveProfileUpdate({ ...preferences, profiles }, `Profile renamed to ${name}.`)) setRenameValue("");
   }
 
   async function deleteProfile() {
     if (!activeProfile || activeProfile.builtIn) return;
-    const fallback = preferences.profiles.find((profile) => profile.id === "productivity");
-    if (!fallback) return;
-    const profiles = preferences.profiles.filter((profile) => profile.id !== activeProfile.id);
-    await saveProfileUpdate(withProfileSettings({ ...preferences, profiles }, fallback), `${activeProfile.name} profile deleted.`);
+    try {
+      await saveProfileUpdate(deleteControlProfile(preferences, activeProfile.id), `${activeProfile.name} profile deleted.`);
+    } catch (error) {
+      setSaveState(error instanceof Error ? error.message : "Profile could not be deleted.");
+    }
   }
 
   async function restoreProfile() {
     if (!activeProfile) return;
-    const preset = BUILT_IN_PROFILES.find((profile) => profile.id === activeProfile.id) ?? BUILT_IN_PROFILES[0];
-    const profiles = preferences.profiles.map((profile) => profile.id === activeProfile.id
-      ? { ...profile, settings: preset.settings }
-      : profile);
-    await saveProfileUpdate(withProfileSettings({ ...preferences, profiles }, { ...activeProfile, settings: preset.settings }), `${activeProfile.name} settings restored.`);
+    try {
+      await saveProfileUpdate(restoreControlProfile(preferences, activeProfile.id), `${activeProfile.name} settings restored.`);
+    } catch (error) {
+      setSaveState(error instanceof Error ? error.message : "Preset could not be restored.");
+    }
   }
 
   return (
