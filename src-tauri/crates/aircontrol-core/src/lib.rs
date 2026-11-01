@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+pub mod app_switch;
 pub mod cursor;
 pub mod filter;
 pub mod gesture;
@@ -57,6 +58,7 @@ pub enum ActiveGesture {
     RightClick,
     WindowMove,
     WindowResize,
+    AppSwitch,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -93,6 +95,7 @@ pub struct UserPreferences {
     pub reverse_scroll_direction: bool,
     pub right_click_enabled: bool,
     pub camera_mirrored: bool,
+    pub app_switch_enabled: bool,
 }
 
 impl Default for UserPreferences {
@@ -106,6 +109,7 @@ impl Default for UserPreferences {
             reverse_scroll_direction: false,
             right_click_enabled: true,
             camera_mirrored: true,
+            app_switch_enabled: false,
         }
     }
 }

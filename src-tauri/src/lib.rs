@@ -205,6 +205,7 @@ fn set_window_control(
             selected,
             preferences.window_sensitivity,
             preferences.camera_mirrored,
+            preferences.app_switch_enabled,
         )?;
         set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Window);
     } else {

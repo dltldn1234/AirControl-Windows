@@ -1,4 +1,7 @@
 use aircontrol_core::ActiveGesture;
+use aircontrol_core::app_switch::{
+    AppSwitchSwipeRecognizer, SwipeDirection, next_window_index, three_finger_swipe_position,
+};
 use aircontrol_core::window::{
     WindowMoveRecognizer, WindowRect, WindowResizeRecognizer, WindowSizeLimits, move_window,
     resize_window,
@@ -31,10 +34,18 @@ struct WindowGestureState {
     move_gesture: WindowMoveRecognizer,
     resize_gesture: WindowResizeRecognizer,
     resize_origin: Option<WindowRect>,
+    app_switch_enabled: bool,
+    app_switch_gesture: AppSwitchSwipeRecognizer,
 }
 
 impl WindowGestureController {
-    pub fn enable(&self, handle: &str, sensitivity: f32, mirrored: bool) -> Result<(), String> {
+    pub fn enable(
+        &self,
+        handle: &str,
+        sensitivity: f32,
+        mirrored: bool,
+        app_switch_enabled: bool,
+    ) -> Result<(), String> {
         let handle = parse_handle(handle)?;
         let target = platform::get_window(handle)?;
         if target.minimized || target.maximized {
@@ -52,6 +63,8 @@ impl WindowGestureController {
             1.0
         };
         state.mirrored = mirrored;
+        state.app_switch_enabled = app_switch_enabled;
+        state.app_switch_gesture.reset();
         state.move_gesture.reset();
         state.resize_gesture.reset();
         state.resize_origin = None;
@@ -68,6 +81,8 @@ impl WindowGestureController {
         state.move_gesture.reset();
         state.resize_gesture.reset();
         state.resize_origin = None;
+        state.app_switch_enabled = false;
+        state.app_switch_gesture.reset();
         Ok(())
     }
 
@@ -90,6 +105,7 @@ impl WindowGestureController {
             state.move_gesture.reset();
             state.resize_gesture.reset();
             state.resize_origin = None;
+            state.app_switch_gesture.reset();
             return Ok(ActiveGesture::None);
         }
 
@@ -101,6 +117,7 @@ impl WindowGestureController {
             .collect::<Vec<_>>();
 
         if valid_hands.len() >= 2 {
+            state.app_switch_gesture.reset();
             state.move_gesture.reset();
             let mut positions = [valid_hands[0][8], valid_hands[1][8]];
             for position in &mut positions {
@@ -145,14 +162,32 @@ impl WindowGestureController {
         if state.resize_gesture.is_active() {
             state.resize_gesture.reset();
             state.resize_origin = None;
+            state.app_switch_enabled = false;
+            state.app_switch_gesture.reset();
             state.move_gesture.reset();
             return Ok(ActiveGesture::None);
         }
 
         let Some(landmarks) = valid_hands.first().copied() else {
+            state.app_switch_gesture.reset();
             state.move_gesture.reset();
             return Ok(ActiveGesture::None);
         };
+        if state.app_switch_enabled {
+            let swipe_position =
+                three_finger_swipe_position(&landmarks, frame_size, state.mirrored);
+            let direction = state
+                .app_switch_gesture
+                .update(swipe_position, std::time::Instant::now());
+            if let Some(direction) = direction
+                && cycle_application(direction)?
+            {
+                state.move_gesture.reset();
+                return Ok(ActiveGesture::AppSwitch);
+            }
+        } else {
+            state.app_switch_gesture.reset();
+        }
         let palm_size = window_point_distance(landmarks[0], landmarks[9]);
         if palm_size <= f32::EPSILON {
             state.move_gesture.reset();
@@ -208,6 +243,8 @@ impl Drop for WindowGestureController {
             state.move_gesture.reset();
             state.resize_gesture.reset();
             state.resize_origin = None;
+            state.app_switch_enabled = false;
+            state.app_switch_gesture.reset();
         }
     }
 }
@@ -226,6 +263,26 @@ pub fn foreground_window() -> Result<Option<WindowInfo>, String> {
 
 pub fn focus_window(handle: &str) -> Result<(), String> {
     platform::focus_window(parse_handle(handle)?)
+}
+
+fn cycle_application(direction: SwipeDirection) -> Result<bool, String> {
+    let windows = list_windows()?;
+    if windows.len() < 2 {
+        return Ok(false);
+    }
+    let foreground = platform::foreground_window()?.map(|window| window.handle);
+    let current =
+        foreground.and_then(|handle| windows.iter().position(|window| window.handle == handle));
+    let Some(next) = next_window_index(current, windows.len(), direction) else {
+        return Ok(false);
+    };
+    match focus_window(&windows[next].handle) {
+        Ok(()) => Ok(true),
+        Err(error) => {
+            log::warn!("Windows declined gesture-driven app activation: {error}");
+            Ok(false)
+        }
+    }
 }
 
 pub fn move_window_by(handle: &str, delta: [f32; 2]) -> Result<WindowRect, String> {

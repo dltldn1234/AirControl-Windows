@@ -18,6 +18,7 @@ describe("runtime status labels", () => {
     expect(gestureLabel("rightClick")).toBe("Right click");
     expect(gestureLabel("windowMove")).toBe("Move window");
     expect(gestureLabel("windowResize")).toBe("Resize window");
+    expect(gestureLabel("appSwitch")).toBe("Switch application");
     expect(gestureLabel("none")).toBe("None");
   });
 
