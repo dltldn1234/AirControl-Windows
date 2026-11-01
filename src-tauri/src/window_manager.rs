@@ -291,7 +291,7 @@ mod platform {
         EnumWindows, GW_OWNER, GWL_EXSTYLE, GetForegroundWindow, GetWindow, GetWindowLongPtrW,
         GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindow,
         IsWindowVisible, IsZoomed, SW_MINIMIZE, SW_RESTORE, SW_SHOWMAXIMIZED, SWP_NOACTIVATE,
-        SWP_NOZORDER, SetForegroundWindow, SetWindowPos, ShowWindow, WNDENUMPROC, WS_EX_TOOLWINDOW,
+        SWP_NOZORDER, SetForegroundWindow, SetWindowPos, ShowWindow, WS_EX_TOOLWINDOW,
     };
 
     const TITLE_CAPACITY: usize = 512;
