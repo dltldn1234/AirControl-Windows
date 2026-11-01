@@ -126,6 +126,12 @@ h1 { margin-bottom:5px; color:#f1f2f5; font-size:24px; font-weight:610; letter-s
 .camera-stage { position:relative; display:grid; place-items:center; min-height:320px; overflow:hidden; border:1px solid #30343d; border-radius:6px; background:radial-gradient(ellipse at 50% 42%,#222732 0,#15171c 66%); }
 .camera-stage.has-frame { background:#0e1014; }
 .camera-frame { display:block; width:100%; max-height:520px; aspect-ratio:4/3; object-fit:contain; transform:scaleX(-1); }
+.camera-overlay { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
+.camera-overlay rect { fill:#8aa9e51c; stroke:#91b5f7; stroke-width:2; vector-effect:non-scaling-stroke; }
+.camera-overlay circle { fill:#f7d487; stroke:#17202c; stroke-width:1; vector-effect:non-scaling-stroke; }
+.camera-overlay .finger-landmarks line { stroke:#72d8ba; stroke-width:2; stroke-linecap:round; vector-effect:non-scaling-stroke; }
+.camera-overlay .finger-landmarks circle { fill:#e9fff8; stroke:#16745b; stroke-width:1; vector-effect:non-scaling-stroke; }
+.camera-overlay text { fill:#e8eef9; font-size:10px; font-weight:700; paint-order:stroke; stroke:#121722; stroke-width:3px; }
 .camera-empty { display:flex; flex-direction:column; align-items:center; gap:8px; padding:20px; text-align:center; }
 .camera-empty>span { display:grid; place-items:center; width:48px; height:48px; margin-bottom:5px; border:1px solid #383d47; border-radius:12px; color:#a8b9d9; background:#252a34; }
 .camera-empty strong { color:#dfe2e9; font-size:12px; font-weight:560; }
@@ -139,6 +145,10 @@ h1 { margin-bottom:5px; color:#f1f2f5; font-size:24px; font-weight:610; letter-s
 .camera-privacy svg { color:#91b8a0; }
 .camera-controls { padding:20px; }
 .camera-controls-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding-bottom:20px; }
+.camera-tracking-status { display:grid; grid-template-columns:1fr auto; gap:5px 12px; padding:0 0 13px; margin:-4px 0 15px; border-bottom:1px solid #2d3038; }
+.camera-tracking-status strong { color:#d8dce4; font-size:10px; }
+.camera-tracking-status>span { color:#9fb5dc; font-size:9px; }
+.camera-tracking-status small { grid-column:1/-1; color:#858b96; font-size:9px; line-height:1.5; }
 .camera-controls-heading h2 { margin:0 0 5px; color:#e4e7ed; font-size:14px; font-weight:590; }
 .camera-controls-heading p { margin:0; color:#8d939e; font-size:10px; line-height:1.5; }
 .camera-state-pill { flex:none; padding:5px 7px; border:1px solid #343943; border-radius:4px; color:#9aa1ac; background:#202228; font-size:8px; font-weight:650; }

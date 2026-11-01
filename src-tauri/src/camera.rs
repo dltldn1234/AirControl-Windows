@@ -1,3 +1,4 @@
+use crate::hand_tracking::HandTrackingModels;
 use aircontrol_core::{CameraState, RuntimeSnapshot};
 use base64::Engine;
 use image::codecs::jpeg::JpegEncoder;
@@ -42,6 +43,7 @@ struct CameraFrameEvent {
     jpeg_base64: String,
     width: u32,
     height: u32,
+    palms: Vec<crate::hand_tracking::PalmDetection>,
 }
 
 struct CameraWorker {
@@ -131,6 +133,12 @@ impl CameraService {
             }
         }
         set_camera_state(runtime, app, CameraState::Stopped, None);
+        set_tracking_state(
+            runtime,
+            app,
+            aircontrol_core::HandTrackingState::Waiting,
+            None,
+        );
         Ok(())
     }
 }
@@ -156,6 +164,33 @@ fn capture_loop(
     finished: Arc<AtomicBool>,
 ) {
     set_camera_state(&runtime, &app, CameraState::Starting, None);
+    set_tracking_state(
+        &runtime,
+        &app,
+        aircontrol_core::HandTrackingState::ModelLoading,
+        None,
+    );
+    let mut hand_models = match HandTrackingModels::load() {
+        Ok(models) => {
+            set_tracking_state(
+                &runtime,
+                &app,
+                aircontrol_core::HandTrackingState::ModelReady,
+                Some("ONNX models loaded; waiting for camera frames."),
+            );
+            Some(models)
+        }
+        Err(error) => {
+            set_tracking_state(
+                &runtime,
+                &app,
+                aircontrol_core::HandTrackingState::Error,
+                Some(&error),
+            );
+            log::error!("Hand tracking models could not be loaded: {error}");
+            None
+        }
+    };
     let requested =
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::Closest(CameraFormat::new(
             Resolution::new(PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT),
@@ -189,8 +224,39 @@ fn capture_loop(
         };
 
         if last_preview.elapsed() >= PREVIEW_INTERVAL {
-            if let Err(error) = emit_preview(&app, &frame) {
-                log::warn!("Camera preview frame could not be encoded: {error}");
+            match frame.decode_image::<RgbFormat>() {
+                Ok(image) => {
+                    let inference = hand_models
+                        .as_mut()
+                        .map(|models| models.detect_palms(&image));
+                    let palms = match inference {
+                        Some(Ok(palms)) => {
+                            let state = if palms.is_empty() {
+                                aircontrol_core::HandTrackingState::Lost
+                            } else {
+                                aircontrol_core::HandTrackingState::Detected
+                            };
+                            set_tracking_state(&runtime, &app, state, None);
+                            palms
+                        }
+                        Some(Err(error)) => {
+                            hand_models = None;
+                            set_tracking_state(
+                                &runtime,
+                                &app,
+                                aircontrol_core::HandTrackingState::Error,
+                                Some(&error),
+                            );
+                            log::error!("Hand inference stopped after a model error: {error}");
+                            Vec::new()
+                        }
+                        None => Vec::new(),
+                    };
+                    if let Err(error) = emit_preview(&app, &image, &palms) {
+                        log::warn!("Camera preview frame could not be encoded: {error}");
+                    }
+                }
+                Err(error) => log::warn!("Camera preview frame could not be decoded: {error}"),
             }
             last_preview = Instant::now();
         }
@@ -201,12 +267,13 @@ fn capture_loop(
     finished.store(true, Ordering::Release);
 }
 
-fn emit_preview(app: &AppHandle, frame: &nokhwa::Buffer) -> Result<(), String> {
-    let image = frame
-        .decode_image::<RgbFormat>()
-        .map_err(|error| format!("Frame decoding failed: {error}"))?;
+fn emit_preview(
+    app: &AppHandle,
+    image: &image::RgbImage,
+    palms: &[crate::hand_tracking::PalmDetection],
+) -> Result<(), String> {
     let (width, height) = preview_dimensions(image.width(), image.height());
-    let resized = image::imageops::resize(&image, width, height, FilterType::Triangle);
+    let resized = image::imageops::resize(image, width, height, FilterType::Triangle);
     let mut jpeg = Cursor::new(Vec::new());
     JpegEncoder::new_with_quality(&mut jpeg, 72)
         .encode_image(&resized)
@@ -215,6 +282,7 @@ fn emit_preview(app: &AppHandle, frame: &nokhwa::Buffer) -> Result<(), String> {
         jpeg_base64: base64::engine::general_purpose::STANDARD.encode(jpeg.into_inner()),
         width,
         height,
+        palms: palms.to_vec(),
     };
     app.emit(CAMERA_FRAME_EVENT, payload)
         .map_err(|error| format!("Preview frame could not be sent to the UI: {error}"))
@@ -240,6 +308,21 @@ fn set_camera_state(
         snapshot.camera = state;
     }
     let _ = app.emit(CAMERA_STATUS_EVENT, CameraStatusEvent { state, message });
+}
+
+fn set_tracking_state(
+    runtime: &Arc<Mutex<RuntimeSnapshot>>,
+    app: &AppHandle,
+    state: aircontrol_core::HandTrackingState,
+    message: Option<&str>,
+) {
+    if let Ok(mut snapshot) = runtime.lock() {
+        snapshot.hand_tracking = state;
+    }
+    let _ = app.emit(
+        "hand-tracking-status",
+        serde_json::json!({ "state": state, "message": message }),
+    );
 }
 
 fn encode_camera_index(index: &CameraIndex) -> String {

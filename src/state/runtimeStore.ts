@@ -1,7 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import type { CameraDevice } from "../domain/camera";
-import type { CameraState, RuntimeSnapshot } from "../domain/runtimeStatus";
+import type { CameraState, HandTrackingState, RuntimeSnapshot } from "../domain/runtimeStatus";
 import type { UserPreferences } from "../domain/userPreferences";
 
 type RuntimeConnection = "preview" | "connected" | "error";
@@ -17,6 +17,7 @@ interface RuntimeStore {
   startCamera: (deviceId: string) => Promise<boolean>;
   stopCamera: () => Promise<boolean>;
   setCameraState: (camera: CameraState) => void;
+  setHandTrackingState: (state: HandTrackingState) => void;
 }
 
 const initialPreferences: UserPreferences = {
@@ -97,5 +98,8 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
   },
   setCameraState: (camera) => set((state) => ({
     status: state.status ? { ...state.status, camera } : null,
+  })),
+  setHandTrackingState: (handTracking) => set((state) => ({
+    status: state.status ? { ...state.status, handTracking } : null,
   })),
 }));

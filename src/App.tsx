@@ -26,9 +26,18 @@ import { useEffect, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useRuntimeStore } from "./state/runtimeStore";
 import type { RuntimeSnapshot } from "./domain/runtimeStatus";
-import type { CameraDevice, CameraFrame, CameraStatusEvent } from "./domain/camera";
+import type { CameraDevice, CameraFrame, CameraStatusEvent, HandTrackingStatusEvent } from "./domain/camera";
 import type { UserPreferences } from "./domain/userPreferences";
 import { cameraLabel, gestureLabel, trackingLabel } from "./domain/runtimeStatus";
+
+const HAND_CONNECTIONS: [number, number][] = [
+  [0, 1], [1, 2], [2, 3], [3, 4],
+  [0, 5], [5, 6], [6, 7], [7, 8],
+  [0, 9], [9, 10], [10, 11], [11, 12],
+  [0, 13], [13, 14], [14, 15], [15, 16],
+  [0, 17], [17, 18], [18, 19], [19, 20],
+  [5, 9], [9, 13], [13, 17],
+];
 
 const navigation = [
   { label: "Overview", icon: Activity, group: "Workspace" },
@@ -125,7 +134,7 @@ function Overview({ status }: { status: RuntimeSnapshot | null }) {
 
       <section className="status-grid" aria-label="System status">
         <StatusCard icon={Camera} label="CAMERA" value={cameraLabel(camera)} detail={camera === "running" ? "Capture is active" : "Waiting for camera service"} />
-        <StatusCard icon={Hand} label="HAND TRACKING" value={trackingLabel(tracking)} detail={tracking === "detected" ? "Landmarks detected" : "No hand data received"} />
+        <StatusCard icon={Hand} label="HAND TRACKING" value={trackingLabel(tracking)} detail={tracking === "detected" ? "Palm found; pose inference is active" : "No hand landmarks received"} />
         <StatusCard icon={MousePointer2} label="CONTROL MODE" value={mode === "disabled" ? "Off" : mode} detail={mode === "disabled" ? "No system input is being sent" : "Explicitly enabled"} />
         <StatusCard icon={WandSparkles} label="GESTURE" value={gestureLabel(gesture)} detail={fps == null ? "FPS unavailable" : `${fps.toFixed(0)} frames per second`} />
       </section>
@@ -157,19 +166,23 @@ function PlannedSection({ title }: { title: string }) {
 function CameraSection({
   connection,
   cameraState,
+  handTrackingState,
   error,
   listCameras,
   startCamera,
   stopCamera,
   setCameraState,
+  setHandTrackingState,
 }: {
   connection: "preview" | "connected" | "error";
   cameraState: RuntimeSnapshot["camera"] | "unavailable";
+  handTrackingState: RuntimeSnapshot["handTracking"];
   error: string | null;
   listCameras: () => Promise<CameraDevice[] | null>;
   startCamera: (deviceId: string) => Promise<boolean>;
   stopCamera: () => Promise<boolean>;
   setCameraState: (state: RuntimeSnapshot["camera"]) => void;
+  setHandTrackingState: (state: RuntimeSnapshot["handTracking"]) => void;
 }) {
   const [cameras, setCameras] = useState<CameraDevice[]>([]);
   const [selectedCamera, setSelectedCamera] = useState("");
@@ -183,6 +196,7 @@ function CameraSection({
     let disposed = false;
     let unlistenFrame: UnlistenFn | undefined;
     let unlistenStatus: UnlistenFn | undefined;
+    let unlistenTracking: UnlistenFn | undefined;
     void listen<CameraFrame>("camera-frame", (event) => {
       setFrame(event.payload);
     }).then((unlisten) => {
@@ -197,12 +211,20 @@ function CameraSection({
       if (disposed) unlisten();
       else unlistenStatus = unlisten;
     });
+    void listen<HandTrackingStatusEvent>("hand-tracking-status", (event) => {
+      setHandTrackingState(event.payload.state);
+      if (event.payload.message) setMessage(event.payload.message);
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else unlistenTracking = unlisten;
+    });
     return () => {
       disposed = true;
       unlistenFrame?.();
       unlistenStatus?.();
+      unlistenTracking?.();
     };
-  }, [canUseCamera, setCameraState]);
+  }, [canUseCamera, setCameraState, setHandTrackingState]);
 
   async function refreshCameras() {
     setLoading(true);
@@ -233,6 +255,7 @@ function CameraSection({
       <div className="camera-preview-column">
         <div className={`camera-stage ${frame ? "has-frame" : ""}`}>
           {frame ? <img className="camera-frame" src={`data:image/jpeg;base64,${frame.jpegBase64}`} alt="Live camera preview" /> : <div className="camera-empty"><span><Video size={25} aria-hidden="true" /></span><strong>{cameraState === "running" ? "Waiting for the first frame" : "Camera preview is off"}</strong><small>Frames are processed and displayed locally.</small></div>}
+          {frame && frame.palms.length > 0 && <svg className="camera-overlay" viewBox={`0 0 ${frame.width} ${frame.height}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label="Detected hand regions and finger-joint landmarks"><g transform={`translate(${frame.width} 0) scale(-1 1)`}>{frame.palms.map((palm, palmIndex) => <g key={palmIndex}><rect x={palm.bounds[0]} y={palm.bounds[1]} width={palm.bounds[2] - palm.bounds[0]} height={palm.bounds[3] - palm.bounds[1]} rx="3" /><text x={palm.bounds[0] + 4} y={Math.max(12, palm.bounds[1] - 5)}>{Math.round(palm.confidence * 100)}%</text>{palm.fingerLandmarks ? <g className="finger-landmarks">{HAND_CONNECTIONS.map(([from, to]) => <line key={`${from}-${to}`} x1={palm.fingerLandmarks?.[from][0]} y1={palm.fingerLandmarks?.[from][1]} x2={palm.fingerLandmarks?.[to][0]} y2={palm.fingerLandmarks?.[to][1]} />)}{palm.fingerLandmarks.map(([x, y], index) => <circle key={index} cx={x} cy={y} r="3" />)}</g> : palm.landmarks.map(([x, y], index) => <circle key={index} cx={x} cy={y} r="4" />)}</g>)}</g></svg>}
           <span className={`camera-live-badge ${cameraState === "running" ? "active" : ""}`}><span />{cameraState === "running" ? "LIVE" : cameraState === "starting" ? "STARTING" : "OFF"}</span>
           {frame && <span className="camera-resolution">{frame.width} × {frame.height}</span>}
         </div>
@@ -240,6 +263,7 @@ function CameraSection({
       </div>
       <div className="camera-controls">
         <div className="camera-controls-heading"><div><h2>Camera source</h2><p>Choose a local camera to see a live preview.</p></div><span className={`camera-state-pill ${cameraState}`}>{cameraLabel(cameraState)}</span></div>
+        <div className="camera-tracking-status" role="status"><strong>Hand tracking</strong><span>{trackingLabel(handTrackingState)}</span><small>{handTrackingState === "modelReady" ? "Models loaded locally; waiting for the first camera frame." : handTrackingState === "detected" ? frame?.palms.some((palm) => palm.fingerLandmarks?.length === 21) ? "Palm and all 21 finger-joint landmarks are visible." : "Palm found; waiting for a confident 21-point pose." : handTrackingState === "lost" ? "No palm is currently visible; the detector keeps searching." : handTrackingState === "error" ? "Hand inference failed. Check the runtime error and restart camera capture." : "Local hand inference is waiting for a camera frame."}</small></div>
         <label className="camera-select-label" htmlFor="camera-device">Available cameras</label>
         <select id="camera-device" value={selectedCamera} disabled={!canUseCamera || cameras.length === 0 || cameraState === "running"} onChange={(event) => setSelectedCamera(event.currentTarget.value)}>
           {cameras.length === 0 ? <option value="">Search for cameras first</option> : cameras.map((camera) => <option key={camera.id} value={camera.id}>{camera.name}</option>)}
@@ -294,7 +318,7 @@ function SettingsSection({
 
 export default function App() {
   const [activeSection, setActiveSection] = useState("Overview");
-  const { status, preferences, connection, error, refresh, savePreferences, listCameras, startCamera, stopCamera, setCameraState } = useRuntimeStore();
+  const { status, preferences, connection, error, refresh, savePreferences, listCameras, startCamera, stopCamera, setCameraState, setHandTrackingState } = useRuntimeStore();
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -322,7 +346,7 @@ export default function App() {
         <header className="topbar"><div className="breadcrumbs"><span>AirControl</span><ChevronRight size={14} /><strong>{activeSection}</strong></div><div className="topbar-actions"><span className={`runtime-chip ${connection}`}><span />{connection === "connected" ? "Runtime connected" : "Preview mode"}</span><button className="icon-button" type="button" aria-label="Keyboard shortcuts"><Command size={16} /></button><span className="topbar-avatar">D</span></div></header>
         <div className="content-scroll">
           <div className="page-title-row"><div><div className="eyebrow page-eyebrow">{activeSection === "Overview" ? "YOUR WORKSPACE" : "AIRCONTROL"}</div><h1>{activeSection}</h1><p>{sectionDescriptions[activeSection]}</p></div>{activeSection === "Overview" ? <button className="primary-button" type="button" disabled title="Camera and control services are not available yet"><span className="button-status" /> Start control <ArrowUpRight size={15} /></button> : <span className="phase-badge">FOUNDATION PHASE</span>}</div>
-          {activeSection === "Overview" ? <Overview status={status} /> : activeSection === "Settings" ? <SettingsSection connection={connection} initialPreferences={preferences} savePreferences={savePreferences} /> : activeSection === "Camera & tracking" ? <CameraSection connection={connection} cameraState={status?.camera ?? "unavailable"} error={error} listCameras={listCameras} startCamera={startCamera} stopCamera={stopCamera} setCameraState={setCameraState} /> : <PlannedSection title={activeSection} />}
+          {activeSection === "Overview" ? <Overview status={status} /> : activeSection === "Settings" ? <SettingsSection connection={connection} initialPreferences={preferences} savePreferences={savePreferences} /> : activeSection === "Camera & tracking" ? <CameraSection connection={connection} cameraState={status?.camera ?? "unavailable"} handTrackingState={status?.handTracking ?? "waiting"} error={error} listCameras={listCameras} startCamera={startCamera} stopCamera={stopCamera} setCameraState={setCameraState} setHandTrackingState={setHandTrackingState} /> : <PlannedSection title={activeSection} />}
           <footer className="page-footer"><span>AirControl for Windows <span className="footer-divider">·</span> Foundation build</span><span>Local processing <span className="footer-divider">·</span> No cloud connection</span></footer>
         </div>
       </main>
