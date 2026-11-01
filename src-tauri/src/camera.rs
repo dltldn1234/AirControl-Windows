@@ -2,6 +2,7 @@ use crate::cursor::CursorController;
 use crate::hand_tracking::HandTrackingModels;
 use crate::keyboard::KeyboardController;
 use crate::window_manager::WindowGestureController;
+use aircontrol_core::command_palette::CommandPaletteStateMachine;
 use aircontrol_core::gesture::{PinchAction, next_cursor_gesture};
 use aircontrol_core::hand_tracking::HandTrackAssociator;
 use aircontrol_core::{CameraState, RuntimeSnapshot};
@@ -62,6 +63,7 @@ pub(super) struct GestureControl {
     pub(super) window: WindowGestureController,
     pub(super) keyboard: KeyboardController,
     pub(super) pinch_sensitivity: f32,
+    pub(super) camera_mirrored: bool,
 }
 
 #[derive(Default)]
@@ -182,6 +184,7 @@ fn capture_loop(
         window: window_control,
         keyboard,
         pinch_sensitivity,
+        camera_mirrored,
     } = controls;
     set_camera_state(&runtime, &app, CameraState::Starting, None);
     set_tracking_state(
@@ -250,6 +253,7 @@ fn capture_loop(
     set_camera_state(&runtime, &app, CameraState::Running, None);
     let mut last_preview = Instant::now();
     let mut hand_tracks = HandTrackAssociator::default();
+    let mut command_palette = CommandPaletteStateMachine::default();
 
     while !stop.load(Ordering::Acquire) {
         let frame = match camera.frame() {
@@ -299,6 +303,14 @@ fn capture_loop(
                                 &mut hand_tracks,
                                 &palms,
                                 [image.width(), image.height()],
+                            );
+                            update_command_palette(
+                                &mut command_palette,
+                                &runtime,
+                                &app,
+                                tracked_hands.iter().flatten().next().copied(),
+                                [image.width(), image.height()],
+                                camera_mirrored,
                             );
                             let landmarks = tracked_hands.iter().flatten().next().copied();
                             match cursor.update_hand_landmarks(
@@ -394,6 +406,97 @@ fn capture_loop(
     set_control_disabled(&runtime, &app);
     set_camera_state(&runtime, &app, CameraState::Stopped, None);
     finished.store(true, Ordering::Release);
+}
+
+fn update_command_palette(
+    machine: &mut CommandPaletteStateMachine,
+    runtime: &Arc<Mutex<RuntimeSnapshot>>,
+    app: &AppHandle,
+    landmarks: Option<[[f32; 2]; 21]>,
+    frame_size: [u32; 2],
+    mirrored: bool,
+) {
+    let palette_mode = runtime.lock().is_ok_and(|snapshot| {
+        snapshot.control_mode == aircontrol_core::ControlMode::CommandPalette
+    });
+    if !palette_mode {
+        if machine.is_active() {
+            let _ = machine.mode_changed();
+        }
+        return;
+    }
+    if !machine.is_active() {
+        machine.open();
+    }
+    let now = Instant::now();
+    let update = match landmarks.and_then(|points| palette_sample(points, frame_size, mirrored)) {
+        Some((position, pinch_distance, cancel_pose)) => {
+            machine.update(Some(position), Some(pinch_distance), cancel_pose, now)
+        }
+        None => machine.tracking_lost(),
+    };
+    let mut message = None;
+    if let Some(command) = update.command {
+        message = Some(
+            match crate::command_palette::execute_if_active(runtime, command) {
+                Ok(()) => format!("Ran {}", command.id()),
+                Err(error) => error,
+            },
+        );
+    } else if update.cancelled {
+        message = Some("Command palette cancelled; no command was sent.".to_owned());
+    }
+    if let Ok(mut snapshot) = runtime.lock() {
+        if snapshot.control_mode != aircontrol_core::ControlMode::CommandPalette {
+            return;
+        }
+        snapshot.palette_hovered_index = update.hovered_index;
+        if let Some(message) = message {
+            snapshot.palette_message = Some(message);
+        }
+        if update.cancelled {
+            snapshot.control_mode = aircontrol_core::ControlMode::Disabled;
+            snapshot.active_gesture = aircontrol_core::ActiveGesture::None;
+            snapshot.palette_hovered_index = None;
+        } else if update.hovered_index.is_some() {
+            snapshot.active_gesture = aircontrol_core::ActiveGesture::CommandPalette;
+        }
+        let _ = app.emit("runtime-status", snapshot.clone());
+    }
+}
+
+fn palette_sample(
+    landmarks: [[f32; 2]; 21],
+    frame_size: [u32; 2],
+    mirrored: bool,
+) -> Option<([f32; 2], f32, bool)> {
+    let [width, height] = frame_size;
+    if width == 0 || height == 0 || landmarks.iter().flatten().any(|value| !value.is_finite()) {
+        return None;
+    }
+    let mut position = [
+        landmarks[8][0] / width as f32,
+        landmarks[8][1] / height as f32,
+    ];
+    if mirrored {
+        position[0] = 1.0 - position[0];
+    }
+    let palm_scale = distance(landmarks[0], landmarks[9]);
+    if !palm_scale.is_finite() || palm_scale <= f32::EPSILON {
+        return None;
+    }
+    let pinch_distance = distance(landmarks[4], landmarks[8]) / palm_scale;
+    let cancel_pose = [8, 12, 16, 20]
+        .into_iter()
+        .zip([5, 9, 13, 17])
+        .all(|(tip, base)| {
+            distance(landmarks[tip], landmarks[0]) < distance(landmarks[base], landmarks[0]) * 0.92
+        });
+    Some((position, pinch_distance, cancel_pose))
+}
+
+fn distance(first: [f32; 2], second: [f32; 2]) -> f32 {
+    (first[0] - second[0]).hypot(first[1] - second[1])
 }
 
 fn emit_preview(
@@ -527,6 +630,8 @@ fn set_control_disabled(runtime: &Arc<Mutex<RuntimeSnapshot>>, app: &AppHandle) 
     if let Ok(mut snapshot) = runtime.lock() {
         snapshot.control_mode = aircontrol_core::ControlMode::Disabled;
         snapshot.active_gesture = aircontrol_core::ActiveGesture::None;
+        snapshot.palette_hovered_index = None;
+        snapshot.palette_message = None;
         let _ = app.emit("runtime-status", snapshot.clone());
     }
 }
@@ -640,7 +745,7 @@ fn request_platform_camera_access() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_camera_index, encode_camera_index, preview_dimensions};
+    use super::{decode_camera_index, encode_camera_index, palette_sample, preview_dimensions};
     use nokhwa::utils::CameraIndex;
 
     #[test]
@@ -666,5 +771,37 @@ mod tests {
         assert_eq!(preview_dimensions(1920, 1080), (640, 360));
         assert_eq!(preview_dimensions(320, 240), (320, 240));
         assert_eq!(preview_dimensions(0, 0), (1, 1));
+    }
+
+    #[test]
+    fn palette_sample_mirrors_index_position_and_normalizes_pinch_by_palm_size() {
+        let mut hand = [[0.0; 2]; 21];
+        hand[0] = [50.0, 50.0];
+        hand[4] = [22.0, 60.0];
+        hand[8] = [20.0, 60.0];
+        hand[9] = [50.0, 30.0];
+
+        let (position, pinch, is_fist) =
+            palette_sample(hand, [100, 100], true).expect("valid hand");
+
+        assert_eq!(position, [0.8, 0.6]);
+        assert!((pinch - 0.1).abs() < 0.001);
+        assert!(!is_fist);
+    }
+
+    #[test]
+    fn palette_sample_detects_closed_fist_cancel_pose() {
+        let mut hand = [[0.0; 2]; 21];
+        hand[0] = [50.0, 50.0];
+        hand[9] = [40.0, 40.0];
+        for (tip, base) in [(8, 5), (12, 9), (16, 13), (20, 17)] {
+            hand[tip] = [51.0, 51.0];
+            hand[base] = [40.0, 40.0];
+        }
+        hand[4] = [52.0, 52.0];
+
+        let (_, _, is_fist) = palette_sample(hand, [100, 100], false).expect("valid hand");
+
+        assert!(is_fist);
     }
 }

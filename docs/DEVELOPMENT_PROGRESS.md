@@ -1,5 +1,15 @@
 # Development Progress
 
+## Current checkpoint (2026-11-01, Issue #27)
+
+- Baseline `origin/main`: 116 commits at `94bbdc7`; work is isolated in `~/Developer/Worktrees/AirControl-Windows/27-feat-air-command-palette` on `27-feat/air-command-palette`.
+- Added an explicitly opened, exclusive Rust command-palette mode. The 3-by-2 command grid supports index-finger hover, a short thumb-index pinch to confirm, a 650 ms fist cancel, tracking-loss cancellation, and reset on mode changes. Invalid/out-of-frame samples cancel safely.
+- Added a fixed backend allowlist: next eligible app, snap the next eligible app window left/right, media play/pause, and volume down/up. App enumeration reuses the existing visible-window filter; snap uses Windows' native Win+Arrow handling; media and volume use virtual keys. Protected or higher-integrity targets may reject input; no security boundary is bypassed.
+- Added a keyboard-accessible React command page with open/close, hover highlight, command buttons, Escape cancel, and preview-mode safety. The camera hand cursor remains interpreted by Rust and never generates browser-side system input.
+- Local macOS-host validation: Rust workspace 105 tests passed (76 core, 29 Tauri/app); strict Clippy with `-D warnings` passed; Rust format check passed; TypeScript/Vite production build passed; Vitest 32 passed; Playwright Chromium 9 passed. This host does not compile the Windows-only `windows-sys` target code or verify real system commands.
+- Windows CI runs only on push-to-main or pull request, so a PR is required to verify the Windows executable. Create it as draft, wait for all checks, then mark ready and merge normally only when green.
+- The original checkout remains untouched, including its two untracked files. GitHub currently reports this repository as Public; the access setting has not been changed.
+
 ## Current state (2026-11-01, Issue #25)
 
 - Baseline `origin/main`: 111 commits at `843cd35`; current feature branch `25-feat/app-specific-profiles` contains the existing domain-model commit `71fe3c4` plus in-progress implementation changes.

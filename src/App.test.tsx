@@ -54,6 +54,18 @@ describe("AirControl desktop shell", () => {
     expect(screen.getByText(/System control remains off/)).toBeInTheDocument();
   });
 
+  it("shows the command palette action list while keeping native actions off in preview", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Command palette" }));
+
+    expect(screen.getByRole("heading", { level: 1, name: "Command palette" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open palette/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Next app/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Snap left/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Play \/ pause/ })).toBeDisabled();
+    expect(screen.getByText(/Open the Windows desktop app/)).toBeInTheDocument();
+  });
+
   it("keeps Air Keyboard off in browser preview and explains its camera prerequisite", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Air Keyboard" }));

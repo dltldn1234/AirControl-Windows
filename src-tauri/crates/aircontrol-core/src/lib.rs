@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod app_profile;
 pub mod app_switch;
+pub mod command_palette;
 pub mod cursor;
 pub mod filter;
 pub mod gesture;
@@ -46,6 +47,7 @@ pub enum ControlMode {
     Cursor,
     Window,
     AirKeyboard,
+    CommandPalette,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -61,6 +63,7 @@ pub enum ActiveGesture {
     WindowMove,
     WindowResize,
     AppSwitch,
+    CommandPalette,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -72,6 +75,8 @@ pub struct RuntimeSnapshot {
     pub active_gesture: ActiveGesture,
     pub frames_per_second: Option<f32>,
     pub active_profile_id: Option<String>,
+    pub palette_hovered_index: Option<usize>,
+    pub palette_message: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

@@ -6,6 +6,7 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_log::{Target, TargetKind};
 
 mod camera;
+mod command_palette;
 mod cursor;
 mod hand_tracking;
 mod keyboard;
@@ -93,6 +94,7 @@ fn start_camera(
             window: window_control.inner().clone(),
             keyboard: keyboard.inner().clone(),
             pinch_sensitivity: preferences.pinch_sensitivity,
+            camera_mirrored: preferences.camera_mirrored,
         },
     )
 }
@@ -313,6 +315,70 @@ fn set_air_keyboard_control(
     Ok(())
 }
 
+#[tauri::command]
+fn set_command_palette_control(
+    enabled: bool,
+    app: AppHandle,
+    runtime: State<'_, RuntimeState>,
+    cursor: State<'_, cursor::CursorController>,
+    window_control: State<'_, window_manager::WindowGestureController>,
+    keyboard: State<'_, keyboard::KeyboardController>,
+) -> Result<(), String> {
+    if enabled {
+        let snapshot = runtime
+            .snapshot
+            .lock()
+            .map_err(|_| "Runtime status is temporarily unavailable.".to_owned())?
+            .clone();
+        let readiness = aircontrol_core::ControlReadiness {
+            camera_running: snapshot.camera == aircontrol_core::CameraState::Running,
+            hand_pose_detected: snapshot.hand_tracking
+                == aircontrol_core::HandTrackingState::Detected,
+        };
+        if !readiness.can_enable() {
+            return Err(
+                "Start the camera and wait for hand tracking before opening the command palette."
+                    .to_owned(),
+            );
+        }
+        if snapshot.control_mode != aircontrol_core::ControlMode::Disabled {
+            return Err(
+                "Stop the active control mode before opening the command palette.".to_owned(),
+            );
+        }
+        cursor.disable()?;
+        window_control.disable()?;
+        keyboard.reset()?;
+        set_control_mode(
+            &runtime,
+            &app,
+            aircontrol_core::ControlMode::CommandPalette,
+            None,
+        );
+    } else {
+        cursor.disable()?;
+        window_control.disable()?;
+        keyboard.reset()?;
+        let current_mode = runtime
+            .snapshot
+            .lock()
+            .map_err(|_| "Runtime status is temporarily unavailable.".to_owned())?
+            .control_mode;
+        if current_mode == aircontrol_core::ControlMode::CommandPalette {
+            set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Disabled, None);
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn execute_palette_command(
+    command_id: String,
+    runtime: State<'_, RuntimeState>,
+) -> Result<(), String> {
+    crate::command_palette::execute_by_id(&runtime.snapshot, &command_id)
+}
+
 fn preferences_for_activation(
     app: &AppHandle,
     executable: Option<String>,
@@ -423,8 +489,13 @@ fn set_control_mode(
     if let Ok(mut snapshot) = runtime.snapshot.lock() {
         snapshot.control_mode = mode;
         snapshot.active_profile_id = active_profile_id;
+        snapshot.palette_hovered_index = None;
+        snapshot.palette_message = None;
         snapshot.active_gesture = match mode {
             aircontrol_core::ControlMode::Cursor => aircontrol_core::ActiveGesture::Cursor,
+            aircontrol_core::ControlMode::CommandPalette => {
+                aircontrol_core::ActiveGesture::CommandPalette
+            }
             aircontrol_core::ControlMode::Disabled
             | aircontrol_core::ControlMode::Window
             | aircontrol_core::ControlMode::AirKeyboard => aircontrol_core::ActiveGesture::None,
@@ -490,6 +561,8 @@ pub fn run() {
             set_cursor_control,
             set_window_control,
             set_air_keyboard_control,
+            set_command_palette_control,
+            execute_palette_command,
             press_air_keyboard_key,
             list_control_windows,
             get_foreground_control_window,

@@ -27,6 +27,17 @@ test("window controls stay unavailable in browser preview mode", async ({ page }
   await expect(page.getByRole("button", { name: "Start hand move" })).toBeDisabled();
 });
 
+test("command palette shows an explicit allowlist without sending actions in browser preview", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Command palette" }).click();
+
+  await expect(page.getByRole("heading", { level: 1, name: "Command palette" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open palette" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Snap left/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Volume up/ })).toBeDisabled();
+  await expect(page.getByText("System commands remain inactive until you open the palette.")).toBeVisible();
+});
+
 test("gesture app switching is an explicit desktop-only preference", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Settings" }).click();
