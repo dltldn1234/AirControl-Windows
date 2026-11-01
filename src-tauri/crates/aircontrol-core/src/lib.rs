@@ -276,13 +276,18 @@ impl UserPreferences {
             if !names.insert(profile.name.trim().to_lowercase()) {
                 return Err("Profile names must be unique.".to_owned());
             }
+            if profile.built_in
+                && !ControlProfile::built_ins()
+                    .iter()
+                    .any(|builtin| builtin.id == profile.id)
+            {
+                return Err("Unknown profiles cannot be marked as built-in.".to_owned());
+            }
         }
         for builtin in ControlProfile::built_ins() {
-            if !self
-                .profiles
-                .iter()
-                .any(|profile| profile.id == builtin.id && profile.built_in)
-            {
+            if !self.profiles.iter().any(|profile| {
+                profile.id == builtin.id && profile.built_in && profile.name == builtin.name
+            }) {
                 return Err("Built-in profiles must remain available.".to_owned());
             }
         }
@@ -409,5 +414,9 @@ mod tests {
             .profiles
             .retain(|profile| profile.id != "presentation");
         assert!(missing_builtin.validate_profiles().is_err());
+
+        let mut renamed_builtin = UserPreferences::default();
+        renamed_builtin.profiles[0].name = "My productivity".into();
+        assert!(renamed_builtin.validate_profiles().is_err());
     }
 }
