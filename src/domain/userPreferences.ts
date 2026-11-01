@@ -4,5 +4,6 @@ export interface UserPreferences {
   pinchSensitivity: number;
   scrollSensitivity: number;
   reverseScrollDirection: boolean;
+  rightClickEnabled: boolean;
   cameraMirrored: boolean;
 }

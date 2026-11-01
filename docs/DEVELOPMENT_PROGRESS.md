@@ -3,9 +3,9 @@
 ## Repository baseline
 
 - Baseline commit count: 0 (empty repository at project start)
-- Current `main` commit count: 14 after the ordinary merge of PR #6. Issue #5 contributed 4 feature commits and a merge commit.
-- Current issue: [#7 — Add safe Windows cursor movement and click dispatch](https://github.com/dltldn1234/AirControl-Windows/issues/7)
-- Current branch: `7-feat/windows-cursor-control` (12 commits ahead of `main` in PR #8; 25 commits reachable from this branch HEAD).
+- Current `main` commit count: 28 after the ordinary merge of PR #8.
+- Current issue: [#9 — Add safe scroll and right-click gestures](https://github.com/dltldn1234/AirControl-Windows/issues/9)
+- Current branch: `9-feat/scroll-right-click` (4 commits ahead of `main`; 30 commits reachable from this branch HEAD).
 - Active stack: Rust, Tauri 2, React, TypeScript, Vite, Tailwind CSS
 
 ## Completed
@@ -59,16 +59,27 @@
 
 ## In progress
 
-- Phase 5 cursor movement and pinch click/drag dispatch: implemented and pushed in Issue #7; awaiting PR Windows CI and device validation.
+- Phase 5 cursor movement and pinch click/drag dispatch: merged through PR #8 after Windows CI passed; actual cursor behavior still needs a Windows PC check.
+- Phase 6 scroll and right-click gestures: implemented and pushed in Issue #9; PR/Windows CI pending.
 - Phase 4 ONNX hand tracking: merged through PR #6 after successful Windows CI; actual webcam landmark quality still needs a Windows PC check.
 
 ## Not implemented
 
-- Window/app control, scrolling and right-click gestures, and Air Keyboard. Cursor movement, left-click, and drag dispatch are in the unmerged Issue #7 branch above.
+- Window/app control and Air Keyboard remain unimplemented. Window/app control planning is tracked in Issue #10.
 - Calibration, gesture customization, tray integration, and Windows packaging.
 - Windows PC hardware validation.
 
 ## Next
 
-1. Commit the live inference change, update Issue #5's draft PR, and verify its Windows runner result.
-2. Validate actual palm and landmark locations using a Windows webcam; tune crop transform or confidence thresholds if needed.
+1. Finish and merge Issue #9 after its Windows CI passes.
+2. Continue Issue #10 window and app control after the scroll/right-click PR.
+3. Validate camera, cursor, click, and scroll behavior on a Windows PC; this macOS host cannot provide that evidence.
+
+## Follow-up (2026-11-01, Issue #9)
+
+- Issue: [#9 — Add safe scroll and right-click gestures](https://github.com/dltldn1234/AirControl-Windows/issues/9). Work is isolated in `9-feat/scroll-right-click`, based on the Issue #7 branch so the cursor-control dependency is explicit.
+- PR #8 for Issue #7 was merged normally at `66a144b110ffaeb9c6f0880940ccd563aa867575` after all Windows CI checks passed, including Windows executable compilation.
+- Implemented in the Issue #9 worktree: normalized two-finger scroll recognition, reversed direction and sensitivity, per-frame wheel bounds and motion dead zone; thumb-middle short-tap right click, hysteresis, cooldown, and conflict resolution with left click; scroll suppresses cursor movement; tracking loss, stop, and teardown reset recognition and release both buttons.
+- Added a persisted right-click enable preference. Deserialization defaults the new field for existing preference JSON files.
+- Issue #9 local verification: Rust workspace tests 48 passed, Clippy with warnings denied passed, formatting passed, frontend typecheck passed, Vitest 5 passed, Vite production build passed, Playwright Chromium 2 passed. Windows `SendInput` and physical camera behavior still require Issue #9 Windows CI and a Windows PC.
+- Four Issue #9 commits are pushed (`069fa4a`, `54302fc`, `b3bbadb`, `716e2bb`), 4 commits ahead of `main`; a draft PR is next after documentation status updates.

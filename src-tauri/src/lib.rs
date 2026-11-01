@@ -130,6 +130,9 @@ fn set_cursor_control(
             preferences.camera_mirrored,
             preferences.cursor_sensitivity,
             preferences.cursor_smoothing,
+            preferences.scroll_sensitivity,
+            preferences.reverse_scroll_direction,
+            preferences.right_click_enabled,
         )?;
         set_control_mode(&runtime, &app, aircontrol_core::ControlMode::Cursor);
     } else {

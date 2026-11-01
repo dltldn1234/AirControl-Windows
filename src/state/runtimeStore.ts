@@ -28,6 +28,7 @@ const initialPreferences: UserPreferences = {
   pinchSensitivity: 1,
   scrollSensitivity: 1,
   reverseScrollDirection: false,
+  rightClickEnabled: true,
   cameraMirrored: true,
 };
 

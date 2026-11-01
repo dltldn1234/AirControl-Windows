@@ -78,6 +78,7 @@ mod tests {
         let requested = UserPreferences {
             cursor_sensitivity: 1.7,
             reverse_scroll_direction: true,
+            right_click_enabled: false,
             ..UserPreferences::default()
         };
         let saved = save_to_path(&path, requested.clone()).expect("save preferences");
@@ -85,6 +86,22 @@ mod tests {
 
         assert_eq!(saved, requested);
         assert_eq!(loaded, requested);
+    }
+
+    #[test]
+    fn preferences_saved_before_right_click_setting_use_enabled_default() {
+        let old_preferences = br#"{
+            "cursorSensitivity": 1.4,
+            "cursorSmoothing": 0.3,
+            "pinchSensitivity": 1.1,
+            "scrollSensitivity": 1.2,
+            "reverseScrollDirection": false,
+            "cameraMirrored": true
+        }"#;
+        let parsed: UserPreferences = serde_json::from_slice(old_preferences)
+            .expect("older preference data remains readable");
+
+        assert!(parsed.right_click_enabled);
     }
 
     #[test]
