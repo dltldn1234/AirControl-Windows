@@ -20,6 +20,16 @@ export interface RuntimeSnapshot {
   framesPerSecond: number | null;
 }
 
+export function canEnableCursorControl(
+  status: RuntimeSnapshot | null,
+  connection: "preview" | "connected" | "error",
+): boolean {
+  return connection === "connected"
+    && status?.camera === "running"
+    && status.handTracking === "detected"
+    && status.controlMode === "disabled";
+}
+
 export function cameraLabel(state: CameraState | "unavailable"): string {
   const labels: Record<CameraState | "unavailable", string> = {
     stopped: "Stopped",

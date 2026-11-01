@@ -28,7 +28,7 @@ import { useRuntimeStore } from "./state/runtimeStore";
 import type { RuntimeSnapshot } from "./domain/runtimeStatus";
 import type { CameraDevice, CameraFrame, CameraStatusEvent, HandTrackingStatusEvent } from "./domain/camera";
 import type { UserPreferences } from "./domain/userPreferences";
-import { cameraLabel, gestureLabel, trackingLabel } from "./domain/runtimeStatus";
+import { cameraLabel, canEnableCursorControl, gestureLabel, trackingLabel } from "./domain/runtimeStatus";
 
 const HAND_CONNECTIONS: [number, number][] = [
   [0, 1], [1, 2], [2, 3], [3, 4],
@@ -116,7 +116,7 @@ function Overview({
   const gesture = status?.activeGesture ?? "none";
   const fps = status?.framesPerSecond;
   const isEnabled = mode === "cursor";
-  const canEnable = connection === "connected" && camera === "running" && tracking === "detected";
+  const canEnable = canEnableCursorControl(status, connection);
 
   return (
     <>
