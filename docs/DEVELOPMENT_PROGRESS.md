@@ -46,8 +46,8 @@
 
 ## Current follow-up (2026-11-01)
 
-- Main still has 9 commits while PR #6 (Issue #5, ONNX hand tracking) awaits the Windows executable build step; formatting, Rust tests, Clippy, frontend typecheck/build, Vitest, and Playwright steps passed on its Windows run.
-- Issue #7, `7-feat/windows-cursor-control`, is being implemented in a separate worktree based on PR #6's head so the original checkout and its untracked `README 2.md` and `src/App 2.tsx` remain untouched.
+- PR #6 for Issue #5 was merged with ordinary merge commit `382577f145803f890f040cad7a4044be729feecb`; `main` now has 14 commits. Its Windows executable build, Rust checks, frontend checks, and Playwright all passed in Windows CI.
+- Issue #7, `7-feat/windows-cursor-control`, is pushed with 11 focused commits on top of PR #6's merged head. It was developed in a separate worktree, preserving the original checkout's untracked `README 2.md` and `src/App 2.tsx`.
 - Added pure virtual-desktop coordinate mapping for negative monitor origins, mirroring, bounds, sensitivity, and invalid geometry.
 - Added a hysteretic pinch state machine: short pinch clicks, sustained pinch starts drag, release or tracking loss ends drag, and cooldown avoids immediate rearming.
 - Added a One Euro cursor filter with an adjustable cutoff driven by the saved smoothing preference and a small dead zone; the filter resets after tracking loss.
@@ -59,8 +59,8 @@
 
 ## In progress
 
-- Phase 5 cursor movement and pinch click/drag dispatch: implemented locally in Issue #7 worktree; awaiting commit, PR, Windows CI, and device validation.
-- Phase 4 ONNX hand tracking: model inference and visual overlay implemented in Issue #5 branch; awaiting the Windows executable build result in PR #6.
+- Phase 5 cursor movement and pinch click/drag dispatch: implemented and pushed in Issue #7; awaiting PR Windows CI and device validation.
+- Phase 4 ONNX hand tracking: merged through PR #6 after successful Windows CI; actual webcam landmark quality still needs a Windows PC check.
 
 ## Not implemented
 
