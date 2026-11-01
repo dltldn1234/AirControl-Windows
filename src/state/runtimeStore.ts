@@ -32,6 +32,7 @@ const initialPreferences: UserPreferences = {
   rightClickEnabled: true,
   cameraMirrored: true,
   appSwitchEnabled: false,
+  cursorCalibration: { left: 0, top: 0, right: 1, bottom: 1 },
 };
 
 export const useRuntimeStore = create<RuntimeStore>((set) => ({

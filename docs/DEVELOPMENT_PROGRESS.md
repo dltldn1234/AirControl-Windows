@@ -1,17 +1,24 @@
 # Development Progress
 
-## Current state (2026-11-01, Issue #19)
+## Current state (2026-11-01, Issue #21)
 
-- Directive baseline: 71 commits on `main` at `bb17403`; 130 additional meaningful commits would be needed to reach 201. This is a target, not a reason to create filler commits.
-- Issue: [#19 — Implement gesture-driven app switching](https://github.com/dltldn1234/AirControl-Windows/issues/19). PR #20 is open from `19-feat/gesture-app-switching`; its Windows CI is pending. The branch has nine commits on the 71-commit baseline.
+- Directive baseline for the 201-commit goal: 71 commits on `main` at `bb17403`; current `main` has 82 commits at `83e32af`, leaving 119 meaningful commits to reach 201. No filler commits will be created.
+- Issue: [#21 — Add persistent cursor movement calibration](https://github.com/dltldn1234/AirControl-Windows/issues/21). PR #22 is open from `21-feat/cursor-calibration`; Windows CI is pending. The branch has ten commits on the 82-commit baseline.
+- Added validated normalized cursor bounds (minimum 15% span per axis), settings persistence with full-frame legacy defaults, cursor and Air Keyboard hover mapping, bounded edge controls, and a reset action.
+- Local verification after rebase: Rust workspace 85 tests passed, rustfmt and Clippy with warnings denied passed; frontend typecheck, 20 Vitest tests, Vite production build, and 6 Playwright tests passed.
+- Physical hand positioning/cursor comfort remain to be checked. Next: wait for PR #22 Windows CI, merge normally if it passes, and update the `main` commit count.
+
+## Previous state (2026-11-01, Issue #19)
+
+- Issue: [#19 — Implement gesture-driven app switching](https://github.com/dltldn1234/AirControl-Windows/issues/19); PR #20 merged normally at `83e32af` after Windows CI run [41288853628](https://github.com/dltldn1234/AirControl-Windows/actions/runs/41288853628) passed.
 - Added normalized three-finger pose gating, horizontal swipe distance/velocity limits, cooldown, no-repeat-until-pose-release, tracking-loss reset, mirrored coordinate handling, and deterministic cycling among eligible visible windows.
-- Window control settings include an opt-in app-switch toggle. Foreground activation continues to use `SetForegroundWindow`; policy denial is logged and ignored without bypass.
-- Local verification: Rust workspace 73 tests passed, rustfmt and Clippy with warnings denied passed; frontend typecheck, 17 Vitest tests, Vite production build, and 5 Playwright tests passed. Windows CI and real application activation still need verification.
-- Next: wait for PR #20 Windows CI, merge normally if it passes, and record the updated `main` commit count.
+- Window control settings include an opt-in app-switch toggle. Foreground activation uses `SetForegroundWindow`; policy denial is logged and ignored without bypass.
+- Local verification: Rust workspace 73 tests passed, rustfmt and Clippy passed; frontend typecheck, 17 Vitest tests, production build, and 5 Playwright tests passed. Real application activation remains a Windows PC check.
+- Issue #19 had 10 branch commits on the 71-commit baseline; merge commit brought `main` to 82 commits.
 
 ## Product roadmap toward 201+ meaningful commits
 
-The 130-commit gap is expected to come from the following independently testable product work, not a per-commit quota. Scope each item as an Issue, then split implementation, safety behavior, UI wiring, tests, and documentation only when each part has a distinct purpose.
+The current 119-commit gap is expected to come from the following independently testable product work, not a per-commit quota. Scope each item as an Issue, then split implementation, safety behavior, UI wiring, tests, and documentation only when each part has a distinct purpose.
 
 - Camera and tracking reliability: device reconnect, frame backpressure, inference timing, low-confidence handling, long-run resource release, lighting checks, and tracking recovery.
 - Adaptive gesture engine: feature extraction, temporal confidence, pinch calibration, drag and scroll conflict resolution, configurable cooldowns, gesture profiles, and replayable landmark fixtures.
@@ -117,15 +124,15 @@ Only changes that improve behavior, safety, maintainability, or verifiable quali
 
 ## Not implemented or awaiting hardware verification
 
-- Gesture-driven app switching is in progress in Issue #19; the current main only activates a user-selected eligible window.
-- Calibration, gesture customization, tray integration, and Windows packaging remain unimplemented.
+- Gesture-driven app switching is implemented through PR #20; actual foreground switching remains to be confirmed on a Windows PC.
+- Cursor calibration is in progress in Issue #21; gesture customization, tray integration, and Windows packaging remain unimplemented.
 - Air Keyboard physical IME/focus behavior and hand tracking quality need Windows PC validation.
 - Windows PC hardware validation.
 
 ## Next
 
-1. Finish and submit Issue #19 for Windows CI review.
-2. Continue with calibration and gesture customization as separate issues.
+1. Finish and submit Issue #21 for Windows CI review.
+2. Continue with gesture customization and profiles as separate issues.
 3. Validate camera, cursor, click, scroll, resize, Air Keyboard IME/focus, and tracking continuity on a Windows PC; this macOS host cannot provide that evidence.
 
 ## Follow-up (2026-11-01, Issue #9)

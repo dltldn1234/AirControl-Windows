@@ -37,6 +37,16 @@ test("gesture app switching is an explicit desktop-only preference", async ({ pa
   await expect(page.getByText(/horizontal three-finger swipe/)).toBeVisible();
 });
 
+test("settings explain and display the safe default cursor calibration range", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings" }).click();
+
+  await expect(page.getByText("Cursor movement range")).toBeVisible();
+  await expect(page.getByRole("slider", { name: "Calibration left edge" })).toHaveValue("0");
+  await expect(page.getByRole("slider", { name: "Calibration right edge" })).toHaveValue("1");
+  await expect(page.getByRole("button", { name: "Reset range" })).toBeDisabled();
+});
+
 test("Air Keyboard preview exposes the layout without sending system key events", async ({ page }) => {
   await page.goto("/?surface=keyboard");
 

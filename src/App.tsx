@@ -26,6 +26,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useRuntimeStore } from "./state/runtimeStore";
 import type { RuntimeSnapshot } from "./domain/runtimeStatus";
+import { DEFAULT_CURSOR_CALIBRATION, moveCalibrationEdge } from "./domain/cursorCalibration";
 import type { CameraDevice, CameraFrame, CameraStatusEvent, HandTrackingStatusEvent } from "./domain/camera";
 import type { UserPreferences } from "./domain/userPreferences";
 import type { WindowInfo } from "./domain/window";
@@ -324,6 +325,18 @@ function SettingsSection({
     setSaveState(saved ? "Preferences saved on this PC." : "Preferences could not be saved in preview mode.");
   }
 
+  function updateCalibration(edge: "left" | "top" | "right" | "bottom", value: number) {
+    const bounds = moveCalibrationEdge(preferences.cursorCalibration, edge, value);
+    setPreferences({ ...preferences, cursorCalibration: bounds });
+  }
+
+  function resetCalibration() {
+    setPreferences({
+      ...preferences,
+      cursorCalibration: DEFAULT_CURSOR_CALIBRATION,
+    });
+  }
+
   return (
     <section className="settings-panel">
       <div className="settings-intro"><span className="planned-icon"><Settings2 size={20} aria-hidden="true" /></span><div><h2>Control preferences</h2><p>Preferences are stored locally. System control remains off when AirControl starts.</p></div></div>
@@ -332,6 +345,11 @@ function SettingsSection({
       <label className="setting-control"><span><strong>Cursor smoothing</strong><small>Balance steady motion and responsiveness.</small></span><span className="range-control"><input aria-label="Cursor smoothing" type="range" min="0" max="0.9" step="0.05" value={preferences.cursorSmoothing} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, cursorSmoothing: Number(event.currentTarget.value) })} /><output>{preferences.cursorSmoothing.toFixed(2)}</output></span></label>
       <label className="setting-control"><span><strong>Pinch sensitivity</strong><small>Set the normalized pinch threshold.</small></span><span className="range-control"><input aria-label="Pinch sensitivity" type="range" min="0.6" max="1.4" step="0.05" value={preferences.pinchSensitivity} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, pinchSensitivity: Number(event.currentTarget.value) })} /><output>{preferences.pinchSensitivity.toFixed(2)}</output></span></label>
       <label className="setting-control"><span><strong>Window move sensitivity</strong><small>Set the travel distance while moving a window with a pinch.</small></span><span className="range-control"><input aria-label="Window move sensitivity" type="range" min="0.4" max="2" step="0.1" value={preferences.windowSensitivity} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, windowSensitivity: Number(event.currentTarget.value) })} /><output>{preferences.windowSensitivity.toFixed(1)}×</output></span></label>
+      <div className="setting-control calibration-heading"><span><strong>Cursor movement range</strong><small>Map this normalized camera area to the full screen. Keep at least 15% of the frame on each axis.</small></span><button type="button" className="secondary-button" disabled={!canSave} onClick={resetCalibration}>Reset range</button></div>
+      <label className="setting-control"><span><strong>Left edge</strong></span><span className="range-control"><input aria-label="Calibration left edge" type="range" min="0" max={preferences.cursorCalibration.right - 0.15} step="0.01" value={preferences.cursorCalibration.left} disabled={!canSave} onChange={(event) => updateCalibration("left", Number(event.currentTarget.value))} /><output>{preferences.cursorCalibration.left.toFixed(2)}</output></span></label>
+      <label className="setting-control"><span><strong>Top edge</strong></span><span className="range-control"><input aria-label="Calibration top edge" type="range" min="0" max={preferences.cursorCalibration.bottom - 0.15} step="0.01" value={preferences.cursorCalibration.top} disabled={!canSave} onChange={(event) => updateCalibration("top", Number(event.currentTarget.value))} /><output>{preferences.cursorCalibration.top.toFixed(2)}</output></span></label>
+      <label className="setting-control"><span><strong>Right edge</strong></span><span className="range-control"><input aria-label="Calibration right edge" type="range" min={preferences.cursorCalibration.left + 0.15} max="1" step="0.01" value={preferences.cursorCalibration.right} disabled={!canSave} onChange={(event) => updateCalibration("right", Number(event.currentTarget.value))} /><output>{preferences.cursorCalibration.right.toFixed(2)}</output></span></label>
+      <label className="setting-control"><span><strong>Bottom edge</strong></span><span className="range-control"><input aria-label="Calibration bottom edge" type="range" min={preferences.cursorCalibration.top + 0.15} max="1" step="0.01" value={preferences.cursorCalibration.bottom} disabled={!canSave} onChange={(event) => updateCalibration("bottom", Number(event.currentTarget.value))} /><output>{preferences.cursorCalibration.bottom.toFixed(2)}</output></span></label>
       <label className="setting-control"><span><strong>Scroll sensitivity</strong><small>Adjust scroll distance per hand movement.</small></span><span className="range-control"><input aria-label="Scroll sensitivity" type="range" min="0.4" max="3" step="0.1" value={preferences.scrollSensitivity} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, scrollSensitivity: Number(event.currentTarget.value) })} /><output>{preferences.scrollSensitivity.toFixed(1)}×</output></span></label>
       <label className="setting-control toggle-setting"><span><strong>Mirror camera coordinates</strong><small>Match cursor direction to a mirrored self-view.</small></span><input aria-label="Mirror camera coordinates" type="checkbox" checked={preferences.cameraMirrored} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, cameraMirrored: event.currentTarget.checked })} /></label>
       <label className="setting-control toggle-setting"><span><strong>Reverse scroll direction</strong><small>Invert vertical hand movement mapping.</small></span><input aria-label="Reverse scroll direction" type="checkbox" checked={preferences.reverseScrollDirection} disabled={!canSave} onChange={(event) => setPreferences({ ...preferences, reverseScrollDirection: event.currentTarget.checked })} /></label>

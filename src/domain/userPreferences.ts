@@ -8,4 +8,5 @@ export interface UserPreferences {
   rightClickEnabled: boolean;
   cameraMirrored: boolean;
   appSwitchEnabled: boolean;
+  cursorCalibration: { left: number; top: number; right: number; bottom: number };
 }

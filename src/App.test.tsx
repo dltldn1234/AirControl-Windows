@@ -31,6 +31,17 @@ describe("AirControl desktop shell", () => {
     expect(screen.getByText(/horizontal three-finger swipe/)).toBeInTheDocument();
   });
 
+  it("shows full-frame cursor calibration defaults and keeps native editing unavailable in preview", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.getByRole("slider", { name: "Calibration left edge" })).toHaveValue("0");
+    expect(screen.getByRole("slider", { name: "Calibration top edge" })).toHaveValue("0");
+    expect(screen.getByRole("slider", { name: "Calibration right edge" })).toHaveValue("1");
+    expect(screen.getByRole("slider", { name: "Calibration bottom edge" })).toHaveValue("1");
+    expect(screen.getByRole("button", { name: "Reset range" })).toBeDisabled();
+  });
+
   it("keeps Air Keyboard off in browser preview and explains its camera prerequisite", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Air Keyboard" }));
