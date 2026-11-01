@@ -37,6 +37,7 @@ struct SwipeStart {
 pub struct AppSwitchSwipeRecognizer {
     start: Option<SwipeStart>,
     last_emitted_at: Option<Instant>,
+    awaiting_pose_release: bool,
 }
 
 impl AppSwitchSwipeRecognizer {
@@ -54,8 +55,13 @@ impl AppSwitchSwipeRecognizer {
                 .all(|coordinate| coordinate.is_finite() && (0.0..=1.0).contains(coordinate))
         }) else {
             self.start = None;
+            self.awaiting_pose_release = false;
             return None;
         };
+
+        if self.awaiting_pose_release {
+            return None;
+        }
 
         let Some(start) = self.start else {
             self.start = Some(SwipeStart { point, at: now });
@@ -86,6 +92,7 @@ impl AppSwitchSwipeRecognizer {
             return None;
         }
         self.last_emitted_at = Some(now);
+        self.awaiting_pose_release = true;
         Some(if delta_x > 0.0 {
             SwipeDirection::Next
         } else {
@@ -95,6 +102,7 @@ impl AppSwitchSwipeRecognizer {
 
     pub fn reset(&mut self) {
         self.start = None;
+        self.awaiting_pose_release = false;
     }
 }
 
@@ -142,6 +150,10 @@ mod tests {
         assert_eq!(
             recognizer.update(Some([0.52, 0.53]), start + Duration::from_millis(240)),
             Some(SwipeDirection::Next)
+        );
+        assert_eq!(
+            recognizer.update(None, start + Duration::from_millis(260)),
+            None
         );
 
         assert_eq!(
