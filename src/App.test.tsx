@@ -66,6 +66,22 @@ describe("AirControl desktop shell", () => {
     expect(screen.getByText(/Open the Windows desktop app/)).toBeInTheDocument();
   });
 
+  it("opens Gesture Studio with profile bindings and keeps camera testing unavailable in browser preview", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Gesture Studio" }));
+
+    expect(screen.getByRole("heading", { level: 1, name: "Gesture Studio" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Index pinch.*Click and drag/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("combobox", { name: "Gesture profile" })).toHaveValue("productivity");
+    expect(screen.getByRole("button", { name: "Start test" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Find camera" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(screen.getByText("Camera FPS")).toBeInTheDocument();
+    expect(screen.getByText("Recent transitions")).toBeInTheDocument();
+    expect(screen.getAllByText("Unavailable")).toHaveLength(2);
+    expect(screen.getByText(/Open the Windows desktop app/)).toBeInTheDocument();
+  });
+
   it("keeps Air Keyboard off in browser preview and explains its camera prerequisite", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Air Keyboard" }));

@@ -34,6 +34,7 @@ import { cameraLabel, canEnableCursorControl, gestureLabel, trackingLabel } from
 import { commandKey, KEYBOARD_ROWS, type KeyboardKey } from "./keyboardLayout";
 import { INITIAL_KEYBOARD_FEEDBACK, reduceKeyboardFeedback } from "./keyboardFeedback";
 import { CommandPaletteSection } from "./CommandPaletteSection";
+import { GestureStudioSection } from "./GestureStudioSection";
 
 const HAND_CONNECTIONS: [number, number][] = [
   [0, 1], [1, 2], [2, 3], [3, 4],
@@ -47,7 +48,7 @@ const HAND_CONNECTIONS: [number, number][] = [
 const navigation = [
   { label: "Overview", icon: Activity, group: "Workspace" },
   { label: "Camera & tracking", icon: Camera, group: "Workspace" },
-  { label: "Gestures", icon: Hand, group: "Workspace" },
+  { label: "Gesture Studio", icon: Hand, group: "Workspace" },
   { label: "Command palette", icon: Command, group: "Workspace" },
   { label: "Window control", icon: AppWindow, group: "Workspace" },
   { label: "Air Keyboard", icon: Keyboard, group: "Workspace" },
@@ -59,7 +60,7 @@ const navigation = [
 const sectionDescriptions: Record<string, string> = {
   Overview: "Your gesture controls, at a glance.",
   "Camera & tracking": "Camera capture and hand landmarks.",
-  Gestures: "Choose how your gestures map to actions.",
+  "Gesture Studio": "Tune gesture bindings, preview recognition, and safely test actions.",
   "Command palette": "Run app, window, and media actions with a hand gesture.",
   "Window control": "Move, resize, and switch between apps.",
   "Air Keyboard": "Type with a floating, gesture-driven keyboard.",
@@ -658,7 +659,7 @@ function App() {
 
 function DashboardApp() {
   const [activeSection, setActiveSection] = useState("Overview");
-  const { status, preferences, connection, error, refresh, savePreferences, listCameras, startCamera, stopCamera, setCursorControl, setRuntimeStatus, setCameraState, setHandTrackingState } = useRuntimeStore();
+  const { status, preferences, connection, error, refresh, savePreferences, listCameras, startCamera, stopCamera, setCursorControl, setGestureTestMode, setRuntimeStatus, setCameraState, setHandTrackingState } = useRuntimeStore();
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
@@ -698,8 +699,8 @@ function DashboardApp() {
       <main className="main-area">
         <header className="topbar"><div className="breadcrumbs"><span>AirControl</span><ChevronRight size={14} /><strong>{activeSection}</strong></div><div className="topbar-actions"><span className={`runtime-chip ${connection}`}><span />{connection === "connected" ? "Runtime connected" : "Preview mode"}</span><button className="icon-button" type="button" aria-label="Keyboard shortcuts"><Command size={16} /></button><span className="topbar-avatar">D</span></div></header>
         <div className="content-scroll">
-          <div className="page-title-row"><div><div className="eyebrow page-eyebrow">{activeSection === "Overview" ? "YOUR WORKSPACE" : "AIRCONTROL"}</div><h1>{activeSection}</h1><p>{sectionDescriptions[activeSection]}</p></div><span className="phase-badge">{activeSection === "Overview" ? "LOCAL FIRST" : "IN DEVELOPMENT"}</span></div>
-          {activeSection === "Overview" ? <Overview status={status} connection={connection} error={error} setCursorControl={setCursorControl} /> : activeSection === "Settings" ? <SettingsSection connection={connection} initialPreferences={preferences} savePreferences={savePreferences} /> : activeSection === "Camera & tracking" ? <CameraSection connection={connection} cameraState={status?.camera ?? "unavailable"} handTrackingState={status?.handTracking ?? "waiting"} error={error} listCameras={listCameras} startCamera={startCamera} stopCamera={stopCamera} setCameraState={setCameraState} setHandTrackingState={setHandTrackingState} /> : activeSection === "Window control" ? <WindowControlSection connection={connection} status={status} /> : activeSection === "Air Keyboard" ? <AirKeyboardSection connection={connection} status={status} /> : activeSection === "Command palette" ? <CommandPaletteSection connection={connection} status={status} /> : <PlannedSection title={activeSection} />}
+          <div className="page-title-row"><div><div className="eyebrow page-eyebrow">{activeSection === "Overview" ? "YOUR WORKSPACE" : "AIRCONTROL"}</div><h1>{activeSection}</h1><p>{sectionDescriptions[activeSection]}</p></div><span className="phase-badge">{activeSection === "Overview" ? "LOCAL FIRST" : activeSection === "Gesture Studio" ? "LIVE STUDIO" : "IN DEVELOPMENT"}</span></div>
+          {activeSection === "Overview" ? <Overview status={status} connection={connection} error={error} setCursorControl={setCursorControl} /> : activeSection === "Settings" ? <SettingsSection connection={connection} initialPreferences={preferences} savePreferences={savePreferences} /> : activeSection === "Camera & tracking" ? <CameraSection connection={connection} cameraState={status?.camera ?? "unavailable"} handTrackingState={status?.handTracking ?? "waiting"} error={error} listCameras={listCameras} startCamera={startCamera} stopCamera={stopCamera} setCameraState={setCameraState} setHandTrackingState={setHandTrackingState} /> : activeSection === "Gesture Studio" ? <GestureStudioSection connection={connection} preferences={preferences} status={status} error={error} savePreferences={savePreferences} listCameras={listCameras} startCamera={startCamera} stopCamera={stopCamera} setGestureTestMode={setGestureTestMode} /> : activeSection === "Window control" ? <WindowControlSection connection={connection} status={status} /> : activeSection === "Air Keyboard" ? <AirKeyboardSection connection={connection} status={status} /> : activeSection === "Command palette" ? <CommandPaletteSection connection={connection} status={status} /> : <PlannedSection title={activeSection} />}
           <footer className="page-footer"><span>AirControl for Windows <span className="footer-divider">·</span> Foundation build</span><span>Local processing <span className="footer-divider">·</span> No cloud connection</span></footer>
         </div>
       </main>
