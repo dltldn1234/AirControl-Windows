@@ -1,5 +1,6 @@
 use crate::cursor::CursorController;
 use crate::hand_tracking::HandTrackingModels;
+use crate::window_manager::WindowGestureController;
 use aircontrol_core::gesture::{PinchAction, next_cursor_gesture};
 use aircontrol_core::{CameraState, RuntimeSnapshot};
 use base64::Engine;
@@ -54,6 +55,12 @@ struct CameraWorker {
     thread: Option<JoinHandle<()>>,
 }
 
+struct GestureControl {
+    cursor: CursorController,
+    window: WindowGestureController,
+    pinch_sensitivity: f32,
+}
+
 #[derive(Default)]
 pub struct CameraService {
     worker: Mutex<Option<CameraWorker>>,
@@ -81,6 +88,7 @@ impl CameraService {
         runtime: Arc<Mutex<RuntimeSnapshot>>,
         device_id: String,
         cursor: CursorController,
+        window_control: WindowGestureController,
         pinch_sensitivity: f32,
     ) -> Result<(), String> {
         let index = decode_camera_index(&device_id)?;
@@ -113,8 +121,11 @@ impl CameraService {
                     index,
                     worker_stop,
                     worker_finished,
-                    cursor,
-                    pinch_sensitivity,
+                    GestureControl {
+                        cursor,
+                        window: window_control,
+                        pinch_sensitivity,
+                    },
                 );
             })
             .map_err(|error| format!("Camera worker could not be started: {error}"))?;
@@ -174,9 +185,13 @@ fn capture_loop(
     index: CameraIndex,
     stop: Arc<AtomicBool>,
     finished: Arc<AtomicBool>,
-    cursor: CursorController,
-    pinch_sensitivity: f32,
+    controls: GestureControl,
 ) {
+    let GestureControl {
+        cursor,
+        window: window_control,
+        pinch_sensitivity,
+    } = controls;
     set_camera_state(&runtime, &app, CameraState::Starting, None);
     set_tracking_state(
         &runtime,
@@ -215,13 +230,27 @@ fn capture_loop(
     let mut camera = match Camera::new(index, requested) {
         Ok(camera) => camera,
         Err(error) => {
-            fail_worker(&runtime, &app, &finished, &cursor, error.to_string());
+            fail_worker(
+                &runtime,
+                &app,
+                &finished,
+                &cursor,
+                &window_control,
+                error.to_string(),
+            );
             return;
         }
     };
 
     if let Err(error) = camera.open_stream() {
-        fail_worker(&runtime, &app, &finished, &cursor, error.to_string());
+        fail_worker(
+            &runtime,
+            &app,
+            &finished,
+            &cursor,
+            &window_control,
+            error.to_string(),
+        );
         return;
     }
 
@@ -232,7 +261,14 @@ fn capture_loop(
         let frame = match camera.frame() {
             Ok(frame) => frame,
             Err(error) => {
-                fail_worker(&runtime, &app, &finished, &cursor, error.to_string());
+                fail_worker(
+                    &runtime,
+                    &app,
+                    &finished,
+                    &cursor,
+                    &window_control,
+                    error.to_string(),
+                );
                 return;
             }
         };
@@ -266,6 +302,22 @@ fn capture_loop(
                                         "Cursor control stopped after an input error: {error}"
                                     );
                                     let _ = cursor.disable();
+                                    let _ = window_control.disable();
+                                    set_control_disabled(&runtime, &app);
+                                }
+                            }
+                            match window_control.update_hand_landmarks(
+                                landmarks,
+                                [image.width(), image.height()],
+                                pinch_sensitivity,
+                            ) {
+                                Ok(moving) => crate::set_window_gesture(&runtime, &app, moving),
+                                Err(error) => {
+                                    log::warn!(
+                                        "Window control stopped after an input error: {error}"
+                                    );
+                                    let _ = window_control.disable();
+                                    let _ = cursor.disable();
                                     set_control_disabled(&runtime, &app);
                                 }
                             }
@@ -279,6 +331,7 @@ fn capture_loop(
                                 pinch_sensitivity,
                             );
                             let _ = cursor.disable();
+                            let _ = window_control.disable();
                             set_control_disabled(&runtime, &app);
                             set_tracking_state(
                                 &runtime,
@@ -295,6 +348,12 @@ fn capture_loop(
                                 [image.width(), image.height()],
                                 pinch_sensitivity,
                             );
+                            let _ = window_control.update_hand_landmarks(
+                                None,
+                                [image.width(), image.height()],
+                                pinch_sensitivity,
+                            );
+                            crate::set_window_gesture(&runtime, &app, false);
                             Vec::new()
                         }
                     };
@@ -310,6 +369,7 @@ fn capture_loop(
 
     let _ = camera.stop_stream();
     let _ = cursor.disable();
+    let _ = window_control.disable();
     set_control_disabled(&runtime, &app);
     set_camera_state(&runtime, &app, CameraState::Stopped, None);
     finished.store(true, Ordering::Release);
@@ -341,9 +401,11 @@ fn fail_worker(
     app: &AppHandle,
     finished: &AtomicBool,
     cursor: &CursorController,
+    window_control: &WindowGestureController,
     message: String,
 ) {
     let _ = cursor.disable();
+    let _ = window_control.disable();
     set_control_disabled(runtime, app);
     set_camera_state(runtime, app, CameraState::Error, Some(message));
     finished.store(true, Ordering::Release);
