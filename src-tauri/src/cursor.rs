@@ -2,7 +2,11 @@ use aircontrol_core::cursor::{
     VirtualDesktop, apply_cursor_sensitivity, map_normalized_cursor, normalize_absolute_cursor,
 };
 use aircontrol_core::filter::OneEuroCursorFilter;
-use aircontrol_core::gesture::{PinchAction, PinchRecognizer};
+use aircontrol_core::gesture::{
+    PinchAction, PinchRecognizer, PinchSource, RightClickRecognizer,
+    choose_pinch_source_with_enabled, two_finger_scroll_position,
+};
+use aircontrol_core::scroll::ScrollRecognizer;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -18,12 +22,27 @@ struct CursorState {
     sensitivity: f32,
     smoothing: f32,
     left_button_down: bool,
+    right_button_down: bool,
     pinch: PinchRecognizer,
+    right_pinch: RightClickRecognizer,
+    active_pinch: Option<PinchSource>,
+    scroll: ScrollRecognizer,
+    scroll_sensitivity: f32,
+    reverse_scroll: bool,
+    right_click_enabled: bool,
     filter: OneEuroCursorFilter,
 }
 
 impl CursorController {
-    pub fn enable(&self, mirrored: bool, sensitivity: f32, smoothing: f32) -> Result<(), String> {
+    pub fn enable(
+        &self,
+        mirrored: bool,
+        sensitivity: f32,
+        smoothing: f32,
+        scroll_sensitivity: f32,
+        reverse_scroll: bool,
+        right_click_enabled: bool,
+    ) -> Result<(), String> {
         let _ = current_virtual_desktop()?;
         let mut state = self
             .state
@@ -40,7 +59,18 @@ impl CursorController {
         } else {
             0.4
         };
+        state.scroll_sensitivity = if scroll_sensitivity.is_finite() {
+            scroll_sensitivity.clamp(0.4, 3.0)
+        } else {
+            1.0
+        };
+        state.reverse_scroll = reverse_scroll;
+        state.right_click_enabled = right_click_enabled;
+        let _ = state.pinch.reset();
+        state.right_pinch.reset();
         state.filter.reset();
+        state.scroll.reset();
+        state.active_pinch = None;
         state.enabled = true;
         Ok(())
     }
@@ -52,8 +82,13 @@ impl CursorController {
             .map_err(|_| "Cursor control is temporarily unavailable.".to_owned())?;
         state.enabled = false;
         let _ = state.pinch.reset();
+        state.right_pinch.reset();
+        state.active_pinch = None;
+        state.scroll.reset();
         state.filter.reset();
-        release_left_button(&mut state)
+        let left_result = release_left_button(&mut state);
+        let right_result = release_right_button(&mut state);
+        left_result.and(right_result)
     }
 
     /// Move from the index fingertip's normalized camera position. Missing
@@ -78,6 +113,11 @@ impl CursorController {
             return release_for_tracking_loss(&mut state);
         };
 
+        let action = update_gestures(&mut state, &landmarks, frame_size, pinch_sensitivity)?;
+        if action == PinchAction::Scroll {
+            return Ok(action);
+        }
+
         let desktop = current_virtual_desktop()?;
         let smoothing = state.smoothing;
         let Some(filtered_point) = state.filter.update(point, smoothing, Instant::now()) else {
@@ -94,22 +134,99 @@ impl CursorController {
         let absolute = normalize_absolute_cursor(screen_point, desktop)
             .ok_or_else(|| "The Windows virtual desktop has no usable area.".to_owned())?;
         platform::move_cursor(absolute)?;
-
-        let normalized_pinch = normalized_pinch_distance(&landmarks);
-        let action = state
-            .pinch
-            .update(normalized_pinch, pinch_sensitivity, Instant::now());
-        dispatch_gesture_action(action, &mut state)?;
         Ok(action)
     }
 }
 
 fn release_for_tracking_loss(state: &mut CursorState) -> Result<PinchAction, String> {
+    let was_scrolling = state.scroll.is_active();
     state.filter.reset();
     let action = state.pinch.reset();
-    dispatch_gesture_action(action, state)?;
-    release_left_button(state)?;
-    Ok(action)
+    state.right_pinch.reset();
+    state.active_pinch = None;
+    state.scroll.reset();
+    let dispatch_result = dispatch_gesture_action(action, state);
+    let left_result = release_left_button(state);
+    let right_result = release_right_button(state);
+    dispatch_result.and(left_result).and(right_result)?;
+    if was_scrolling && action == PinchAction::None {
+        Ok(PinchAction::Cursor)
+    } else {
+        Ok(action)
+    }
+}
+
+fn update_gestures(
+    state: &mut CursorState,
+    landmarks: &[[f32; 2]; 21],
+    frame_size: [u32; 2],
+    pinch_sensitivity: f32,
+) -> Result<PinchAction, String> {
+    let left_distance = normalized_pinch_distance(landmarks, 8);
+    let right_distance = normalized_pinch_distance(landmarks, 12);
+    let source = state.active_pinch.or_else(|| {
+        choose_pinch_source_with_enabled(
+            left_distance,
+            right_distance,
+            pinch_sensitivity,
+            state.right_click_enabled,
+        )
+    });
+
+    if let Some(source) = source {
+        state.scroll.reset();
+        match source {
+            PinchSource::LeftClick => {
+                state.right_pinch.reset();
+                let action = state
+                    .pinch
+                    .update(left_distance, pinch_sensitivity, Instant::now());
+                dispatch_gesture_action(action, state)?;
+                state.active_pinch = state.pinch.is_active().then_some(PinchSource::LeftClick);
+                return Ok(action);
+            }
+            PinchSource::RightClick => {
+                let _ = state.pinch.reset();
+                let clicked =
+                    state
+                        .right_pinch
+                        .update(right_distance, pinch_sensitivity, Instant::now());
+                if clicked {
+                    send_right_click(state)?;
+                }
+                state.active_pinch = state
+                    .right_pinch
+                    .is_active()
+                    .then_some(PinchSource::RightClick);
+                return Ok(if clicked {
+                    PinchAction::RightClick
+                } else {
+                    PinchAction::None
+                });
+            }
+        }
+    }
+
+    let was_scrolling = state.scroll.is_active();
+    let vertical_position = two_finger_scroll_position(landmarks, frame_size[1]);
+    let update = state.scroll.update(
+        vertical_position.is_some(),
+        vertical_position,
+        state.scroll_sensitivity,
+        state.reverse_scroll,
+    );
+    if update.active {
+        state.filter.reset();
+        if update.wheel_delta != 0 {
+            platform::scroll(update.wheel_delta)?;
+        }
+        return Ok(PinchAction::Scroll);
+    }
+    if was_scrolling {
+        state.filter.reset();
+        return Ok(PinchAction::Cursor);
+    }
+    Ok(PinchAction::None)
 }
 
 impl Drop for CursorController {
@@ -122,6 +239,7 @@ impl Drop for CursorController {
         {
             state.enabled = false;
             let _ = release_left_button(state);
+            let _ = release_right_button(state);
         }
     }
 }
@@ -135,9 +253,20 @@ fn release_left_button(state: &mut CursorState) -> Result<(), String> {
     Ok(())
 }
 
+fn release_right_button(state: &mut CursorState) -> Result<(), String> {
+    if !state.right_button_down {
+        return Ok(());
+    }
+    platform::right_button(false)?;
+    state.right_button_down = false;
+    Ok(())
+}
+
 fn dispatch_gesture_action(action: PinchAction, state: &mut CursorState) -> Result<(), String> {
     match action {
-        PinchAction::None => Ok(()),
+        PinchAction::None | PinchAction::Cursor | PinchAction::RightClick | PinchAction::Scroll => {
+            Ok(())
+        }
         PinchAction::Click => send_click(state),
         PinchAction::DragStart => {
             if !state.left_button_down {
@@ -148,6 +277,17 @@ fn dispatch_gesture_action(action: PinchAction, state: &mut CursorState) -> Resu
         }
         PinchAction::DragEnd => release_left_button(state),
     }
+}
+
+fn send_right_click(state: &mut CursorState) -> Result<(), String> {
+    if state.right_button_down {
+        return Err("A mouse button is already held; stop control to release it.".to_owned());
+    }
+    platform::right_button(true)?;
+    state.right_button_down = true;
+    platform::right_button(false)?;
+    state.right_button_down = false;
+    Ok(())
 }
 
 fn send_click(state: &mut CursorState) -> Result<(), String> {
@@ -171,9 +311,9 @@ fn normalized_landmark(point: [f32; 2], frame_size: [u32; 2]) -> Option<[f32; 2]
     ])
 }
 
-fn normalized_pinch_distance(landmarks: &[[f32; 2]; 21]) -> Option<f32> {
+fn normalized_pinch_distance(landmarks: &[[f32; 2]; 21], finger_tip: usize) -> Option<f32> {
     let thumb = landmarks[4];
-    let index = landmarks[8];
+    let fingertip = landmarks[finger_tip];
     let wrist = landmarks[0];
     let middle_mcp = landmarks[9];
     if landmarks
@@ -184,7 +324,7 @@ fn normalized_pinch_distance(landmarks: &[[f32; 2]; 21]) -> Option<f32> {
         return None;
     }
     let palm_size = distance(wrist, middle_mcp);
-    (palm_size > f32::EPSILON).then(|| distance(thumb, index) / palm_size)
+    (palm_size > f32::EPSILON).then(|| distance(thumb, fingertip) / palm_size)
 }
 
 fn distance(first: [f32; 2], second: [f32; 2]) -> f32 {
@@ -201,7 +341,8 @@ mod platform {
     use std::mem::size_of;
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
         INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN,
-        MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_VIRTUALDESK, MOUSEINPUT, SendInput,
+        MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP,
+        MOUSEEVENTF_VIRTUALDESK, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
@@ -240,6 +381,19 @@ mod platform {
             MOUSEEVENTF_LEFTUP
         };
         send_mouse_input(0, 0, 0, flags)
+    }
+
+    pub fn right_button(down: bool) -> Result<(), String> {
+        let flags = if down {
+            MOUSEEVENTF_RIGHTDOWN
+        } else {
+            MOUSEEVENTF_RIGHTUP
+        };
+        send_mouse_input(0, 0, 0, flags)
+    }
+
+    pub fn scroll(wheel_delta: i32) -> Result<(), String> {
+        send_mouse_input(0, 0, wheel_delta as u32, MOUSEEVENTF_WHEEL)
     }
 
     fn send_mouse_input(x: i32, y: i32, mouse_data: u32, flags: u32) -> Result<(), String> {
@@ -281,6 +435,14 @@ mod platform {
     }
 
     pub fn left_button(_down: bool) -> Result<(), String> {
+        Err("System cursor control is available only in the Windows desktop app.".to_owned())
+    }
+
+    pub fn right_button(_down: bool) -> Result<(), String> {
+        Err("System cursor control is available only in the Windows desktop app.".to_owned())
+    }
+
+    pub fn scroll(_wheel_delta: i32) -> Result<(), String> {
         Err("System cursor control is available only in the Windows desktop app.".to_owned())
     }
 }
@@ -331,9 +493,12 @@ mod tests {
         landmarks[9] = [0.0, 10.0];
         landmarks[4] = [0.0, 4.0];
         landmarks[8] = [0.0, 6.0];
-        assert_eq!(normalized_pinch_distance(&landmarks), Some(0.2));
+        landmarks[12] = [0.0, 6.0];
+        assert_eq!(normalized_pinch_distance(&landmarks, 8), Some(0.2));
+        landmarks[12] = [0.0, 8.0];
+        assert_eq!(normalized_pinch_distance(&landmarks, 12), Some(0.4));
 
         landmarks[9] = landmarks[0];
-        assert_eq!(normalized_pinch_distance(&landmarks), None);
+        assert_eq!(normalized_pinch_distance(&landmarks, 8), None);
     }
 }
