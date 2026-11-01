@@ -474,6 +474,23 @@ mod hand_association_tests {
     }
 
     #[test]
+    fn camera_uses_the_remaining_hand_without_reusing_lost_landmarks() {
+        let mut associator = HandTrackAssociator::default();
+        let both = [palm_at(20.0, 0.9), palm_at(80.0, 0.8)];
+        associate_hand_landmarks(&mut associator, &both, [100, 100]);
+
+        let remaining = [palm_at(82.0, 0.95)];
+        let tracks = associate_hand_landmarks(&mut associator, &remaining, [100, 100]);
+
+        assert!(tracks[0].is_none());
+        assert_eq!(tracks[1].unwrap()[0], [82.0, 50.0]);
+        assert_eq!(
+            tracks.iter().flatten().next().copied().unwrap()[0],
+            [82.0, 50.0]
+        );
+    }
+
+    #[test]
     fn camera_association_resets_on_invalid_frame_geometry() {
         let mut associator = HandTrackAssociator::default();
         let palms = [palm_at(20.0, 0.9)];
