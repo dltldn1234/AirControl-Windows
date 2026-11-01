@@ -254,13 +254,22 @@ fn set_air_keyboard_control(
         cursor.disable()?;
         window_control.disable()?;
         keyboard.reset()?;
-        cursor.enable_air_keyboard(
+        show_air_keyboard(&app)?;
+        let Some(bounds) = keyboard::overlay_bounds(&app) else {
+            if let Some(window) = app.get_webview_window("air-keyboard") {
+                let _ = window.hide();
+            }
+            return Err("Windows did not report the floating keyboard position.".to_owned());
+        };
+        if let Err(error) = cursor.enable_air_keyboard(
             preferences.camera_mirrored,
             preferences.cursor_sensitivity,
             preferences.cursor_smoothing,
-        )?;
-        if let Err(error) = show_air_keyboard(&app) {
-            let _ = cursor.disable();
+            bounds,
+        ) {
+            if let Some(window) = app.get_webview_window("air-keyboard") {
+                let _ = window.hide();
+            }
             return Err(error);
         }
         set_control_mode(&runtime, &app, aircontrol_core::ControlMode::AirKeyboard);

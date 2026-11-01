@@ -274,6 +274,13 @@ fn capture_loop(
                         .map(|models| models.detect_palms(&image));
                     let palms = match inference {
                         Some(Ok(palms)) => {
+                            let keyboard_active = runtime.lock().is_ok_and(|snapshot| {
+                                snapshot.control_mode == aircontrol_core::ControlMode::AirKeyboard
+                            });
+                            let keyboard_bounds = keyboard_active
+                                .then(|| crate::keyboard::overlay_bounds(&app))
+                                .flatten();
+                            let _ = cursor.update_keyboard_bounds(keyboard_bounds);
                             let has_pose = palms.iter().any(|palm| palm.finger_landmarks.is_some());
                             if !has_pose {
                                 let _ = keyboard.reset_modifiers();

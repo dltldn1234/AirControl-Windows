@@ -7,6 +7,29 @@ pub const VK_SPACE: u16 = 0x20;
 pub const VK_SHIFT: u16 = 0x10;
 pub const VK_CAPITAL: u16 = 0x14;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct KeyboardBounds {
+    pub left: i32,
+    pub top: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl KeyboardBounds {
+    pub const fn is_usable(self) -> bool {
+        self.width > 0 && self.height > 0
+    }
+
+    pub fn contains(self, point: [i32; 2]) -> bool {
+        if !self.is_usable() {
+            return false;
+        }
+        let x = i64::from(point[0]) - i64::from(self.left);
+        let y = i64::from(point[1]) - i64::from(self.top);
+        x >= 0 && y >= 0 && x < i64::from(self.width) && y < i64::from(self.height)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum KeyboardLayout {
     #[default]
@@ -290,6 +313,22 @@ mod tests {
         assert!(!tap.update(Some(0.2), start + Duration::from_millis(710)));
         assert!(!tap.update(Some(0.2), start + Duration::from_millis(720)));
         assert!(!tap.update(Some(0.5), start + Duration::from_millis(730)));
+    }
+
+    #[test]
+    fn hand_click_bounds_include_edges_but_exclude_points_outside_the_keyboard() {
+        let bounds = KeyboardBounds {
+            left: -200,
+            top: 400,
+            width: 800,
+            height: 280,
+        };
+        assert!(bounds.contains([-200, 400]));
+        assert!(bounds.contains([599, 679]));
+        assert!(!bounds.contains([-201, 400]));
+        assert!(!bounds.contains([600, 679]));
+        assert!(!bounds.contains([0, 680]));
+        assert!(!KeyboardBounds { width: 0, ..bounds }.contains([-200, 400]));
     }
 
     #[test]

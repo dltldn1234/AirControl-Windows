@@ -6,6 +6,7 @@ use aircontrol_core::gesture::{
     PinchAction, PinchRecognizer, PinchSource, RightClickRecognizer,
     choose_pinch_source_with_enabled, two_finger_scroll_position,
 };
+use aircontrol_core::keyboard::KeyboardBounds;
 use aircontrol_core::keyboard::KeyboardTapRecognizer;
 use aircontrol_core::scroll::ScrollRecognizer;
 use std::sync::{Arc, Mutex};
@@ -20,6 +21,7 @@ pub struct CursorController {
 struct CursorState {
     enabled: bool,
     keyboard_mode: bool,
+    keyboard_bounds: Option<KeyboardBounds>,
     mirrored: bool,
     sensitivity: f32,
     smoothing: f32,
@@ -76,6 +78,7 @@ impl CursorController {
         state.active_pinch = None;
         state.enabled = true;
         state.keyboard_mode = false;
+        state.keyboard_bounds = None;
         Ok(())
     }
 
@@ -84,7 +87,11 @@ impl CursorController {
         mirrored: bool,
         sensitivity: f32,
         smoothing: f32,
+        bounds: KeyboardBounds,
     ) -> Result<(), String> {
+        if !bounds.is_usable() {
+            return Err("The floating keyboard has no usable screen bounds.".to_owned());
+        }
         let _ = current_virtual_desktop()?;
         let mut state = self
             .state
@@ -103,8 +110,20 @@ impl CursorController {
         };
         state.filter.reset();
         state.keyboard_tap.reset();
+        state.keyboard_bounds = Some(bounds);
         state.keyboard_mode = true;
         state.enabled = true;
+        Ok(())
+    }
+
+    pub fn update_keyboard_bounds(&self, bounds: Option<KeyboardBounds>) -> Result<(), String> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "Cursor control is temporarily unavailable.".to_owned())?;
+        if state.keyboard_mode {
+            state.keyboard_bounds = bounds.filter(|bounds| bounds.is_usable());
+        }
         Ok(())
     }
 
@@ -115,6 +134,7 @@ impl CursorController {
             .map_err(|_| "Cursor control is temporarily unavailable.".to_owned())?;
         state.enabled = false;
         state.keyboard_mode = false;
+        state.keyboard_bounds = None;
         state.keyboard_tap.reset();
         let _ = state.pinch.reset();
         state.right_pinch.reset();
@@ -166,7 +186,11 @@ impl CursorController {
             let absolute = normalize_absolute_cursor(screen_point, desktop)
                 .ok_or_else(|| "The Windows virtual desktop has no usable area.".to_owned())?;
             platform::move_cursor(absolute)?;
-            if clicked {
+            if clicked
+                && state
+                    .keyboard_bounds
+                    .is_some_and(|bounds| bounds.contains([screen_point.x, screen_point.y]))
+            {
                 platform::left_button(true)?;
                 platform::left_button(false)?;
                 return Ok(PinchAction::Click);

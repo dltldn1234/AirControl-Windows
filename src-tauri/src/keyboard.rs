@@ -1,5 +1,19 @@
 use aircontrol_core::keyboard::{KeyStroke, KeyboardSession};
 use std::sync::{Arc, Mutex};
+use tauri::{AppHandle, Manager};
+
+pub fn overlay_bounds(app: &AppHandle) -> Option<aircontrol_core::keyboard::KeyboardBounds> {
+    let window = app.get_webview_window("air-keyboard")?;
+    let position = window.outer_position().ok()?;
+    let size = window.outer_size().ok()?;
+    let bounds = aircontrol_core::keyboard::KeyboardBounds {
+        left: position.x,
+        top: position.y,
+        width: size.width,
+        height: size.height,
+    };
+    bounds.is_usable().then_some(bounds)
+}
 
 #[derive(Clone, Default)]
 pub struct KeyboardController {
