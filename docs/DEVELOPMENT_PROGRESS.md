@@ -3,9 +3,9 @@
 ## Current state (2026-11-01, Issue #23)
 
 - Current `origin/main` baseline: 82 commits at `83e32af`; 119 meaningful commits remain to reach the user's 201-commit target. No filler commits will be created.
-- Issue: [#23 — Add named control profiles and built-in presets](https://github.com/dltldn1234/AirControl-Windows/issues/23). Branch: `23-feat/control-profiles`, eight commits ahead of the 82-commit baseline. PR creation is next after rebase onto the pending cursor-calibration merge.
+- Issue: [#23 — Add named control profiles and built-in presets](https://github.com/dltldn1234/AirControl-Windows/issues/23). Branch: `23-feat/control-profiles`, twelve commits ahead of the 82-commit baseline. PR creation is next after rebase onto the pending cursor-calibration merge.
 - Added Rust profile models and validation, Productivity/Presentation/Custom presets, local atomic persistence within existing preferences, migration from older preference files, and Settings UI for selection, save-as, rename, delete, and preset restoration. Selecting a profile never activates the camera or system input.
-- Local validation: Rust workspace 88 tests passed; rustfmt and Clippy with warnings denied passed; frontend typecheck, 21 Vitest tests, production build, and 6 Playwright tests passed.
+- Local validation: Rust workspace 88 tests passed; rustfmt and Clippy with warnings denied passed; frontend typecheck, 23 Vitest tests, production build, and 6 Playwright tests passed. The latest profile lifecycle refactor passed typecheck and Vitest; production build and browser tests are being rerun.
 - Issue #21 / PR #22 cursor calibration is still open. Latest Windows CI run `41289630039` passed Rust tests, Clippy, formatting, frontend build/tests, and browser tests; Windows executable build is still running. Merge only after the final job succeeds.
 - Windows physical behavior for calibration and profile-driven control settings remains to be checked on a Windows PC.
 - Next: finish PR #22 CI and merge normally if successful, rebase this profile branch, update this status with the new main count, then open PR #23 and wait for its Windows CI.
