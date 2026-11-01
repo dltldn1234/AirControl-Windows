@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+pub mod cursor;
+pub mod filter;
+pub mod gesture;
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CameraState {
@@ -21,6 +25,7 @@ pub enum HandTrackingState {
     Waiting,
     ModelLoading,
     ModelReady,
+    PalmDetected,
     Detected,
     Lost,
     Error,
@@ -56,18 +61,17 @@ pub struct RuntimeSnapshot {
     pub control_mode: ControlMode,
     pub active_gesture: ActiveGesture,
     pub frames_per_second: Option<f32>,
-    pub accessibility_granted: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ControlReadiness {
     pub camera_running: bool,
-    pub accessibility_granted: bool,
+    pub hand_pose_detected: bool,
 }
 
 impl ControlReadiness {
     pub const fn can_enable(self) -> bool {
-        self.camera_running && self.accessibility_granted
+        self.camera_running && self.hand_pose_detected
     }
 }
 
@@ -122,31 +126,30 @@ mod tests {
         let status = RuntimeSnapshot::default();
 
         assert_eq!(status.control_mode, ControlMode::Disabled);
-        assert!(!status.accessibility_granted);
         assert_eq!(status.frames_per_second, None);
     }
 
     #[test]
-    fn control_requires_camera_and_accessibility_readiness() {
+    fn cursor_control_requires_camera_and_a_detected_hand_pose() {
         assert!(!ControlReadiness::default().can_enable());
         assert!(
             !ControlReadiness {
                 camera_running: true,
-                accessibility_granted: false,
+                hand_pose_detected: false,
             }
             .can_enable()
         );
         assert!(
             !ControlReadiness {
                 camera_running: false,
-                accessibility_granted: true,
+                hand_pose_detected: true,
             }
             .can_enable()
         );
         assert!(
             ControlReadiness {
                 camera_running: true,
-                accessibility_granted: true,
+                hand_pose_detected: true,
             }
             .can_enable()
         );

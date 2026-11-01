@@ -5,7 +5,7 @@ test("dashboard clearly separates preview from the desktop runtime", async ({ pa
 
   await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
   await expect(page.getByText("Desktop runtime is not connected")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Start control/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Start cursor control/ })).toBeDisabled();
 });
 
 test("camera page clearly separates native capture from browser preview", async ({ page }) => {

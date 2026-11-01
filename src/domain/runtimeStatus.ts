@@ -8,7 +8,7 @@ export type CameraState =
   | "unavailable"
   | "error";
 
-export type HandTrackingState = "waiting" | "modelLoading" | "modelReady" | "detected" | "lost" | "error";
+export type HandTrackingState = "waiting" | "modelLoading" | "modelReady" | "palmDetected" | "detected" | "lost" | "error";
 export type ControlMode = "disabled" | "cursor" | "window" | "airKeyboard";
 export type ActiveGesture = "none" | "cursor" | "click" | "drag" | "scroll" | "rightClick";
 
@@ -18,7 +18,16 @@ export interface RuntimeSnapshot {
   controlMode: ControlMode;
   activeGesture: ActiveGesture;
   framesPerSecond: number | null;
-  accessibilityGranted: boolean;
+}
+
+export function canEnableCursorControl(
+  status: RuntimeSnapshot | null,
+  connection: "preview" | "connected" | "error",
+): boolean {
+  return connection === "connected"
+    && status?.camera === "running"
+    && status.handTracking === "detected"
+    && status.controlMode === "disabled";
 }
 
 export function cameraLabel(state: CameraState | "unavailable"): string {
@@ -40,7 +49,8 @@ export function trackingLabel(state: HandTrackingState): string {
     waiting: "Waiting",
     modelLoading: "Loading model",
     modelReady: "Model loaded",
-    detected: "Palm detected",
+    palmDetected: "Palm detected",
+    detected: "21 landmarks",
     lost: "Tracking lost",
     error: "Model error",
   };
