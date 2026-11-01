@@ -21,6 +21,16 @@ describe("AirControl desktop shell", () => {
     expect(screen.getByRole("button", { name: "Start preview" })).toBeDisabled();
   });
 
+  it("keeps gesture app switching opt-in and unavailable in browser preview", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+
+    const toggle = screen.getByRole("checkbox", { name: "Gesture app switching" });
+    expect(toggle).not.toBeChecked();
+    expect(toggle).toBeDisabled();
+    expect(screen.getByText(/horizontal three-finger swipe/)).toBeInTheDocument();
+  });
+
   it("keeps Air Keyboard off in browser preview and explains its camera prerequisite", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Air Keyboard" }));

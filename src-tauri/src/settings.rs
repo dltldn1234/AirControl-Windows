@@ -102,6 +102,7 @@ mod tests {
             .expect("older preference data remains readable");
 
         assert!(parsed.right_click_enabled);
+        assert!(!parsed.app_switch_enabled);
     }
 
     #[test]

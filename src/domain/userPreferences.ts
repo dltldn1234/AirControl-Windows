@@ -7,4 +7,5 @@ export interface UserPreferences {
   reverseScrollDirection: boolean;
   rightClickEnabled: boolean;
   cameraMirrored: boolean;
+  appSwitchEnabled: boolean;
 }

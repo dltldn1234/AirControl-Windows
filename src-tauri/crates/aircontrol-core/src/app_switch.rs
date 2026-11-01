@@ -6,6 +6,25 @@ pub enum SwipeDirection {
     Next,
 }
 
+pub fn next_window_index(
+    current: Option<usize>,
+    window_count: usize,
+    direction: SwipeDirection,
+) -> Option<usize> {
+    if window_count == 0 {
+        return None;
+    }
+    Some(
+        match (direction, current.filter(|index| *index < window_count)) {
+            (SwipeDirection::Next, Some(index)) => (index + 1) % window_count,
+            (SwipeDirection::Previous, Some(0)) => window_count - 1,
+            (SwipeDirection::Previous, Some(index)) => index - 1,
+            (SwipeDirection::Next, None) => 0,
+            (SwipeDirection::Previous, None) => window_count - 1,
+        },
+    )
+}
+
 #[derive(Clone, Copy, Debug)]
 struct SwipeStart {
     point: [f32; 2],
@@ -212,5 +231,23 @@ mod tests {
             three_finger_swipe_position(&landmarks, [0, 200], false),
             None
         );
+    }
+
+    #[test]
+    fn application_cycle_wraps_in_both_directions_and_handles_missing_windows() {
+        use super::next_window_index;
+
+        assert_eq!(
+            next_window_index(Some(0), 3, SwipeDirection::Previous),
+            Some(2)
+        );
+        assert_eq!(next_window_index(Some(2), 3, SwipeDirection::Next), Some(0));
+        assert_eq!(next_window_index(None, 3, SwipeDirection::Next), Some(0));
+        assert_eq!(
+            next_window_index(None, 3, SwipeDirection::Previous),
+            Some(2)
+        );
+        assert_eq!(next_window_index(Some(8), 3, SwipeDirection::Next), Some(0));
+        assert_eq!(next_window_index(Some(0), 0, SwipeDirection::Next), None);
     }
 }
