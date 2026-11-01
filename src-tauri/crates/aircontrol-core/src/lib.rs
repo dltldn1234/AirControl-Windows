@@ -71,6 +71,7 @@ pub struct RuntimeSnapshot {
     pub control_mode: ControlMode,
     pub active_gesture: ActiveGesture,
     pub frames_per_second: Option<f32>,
+    pub active_profile_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

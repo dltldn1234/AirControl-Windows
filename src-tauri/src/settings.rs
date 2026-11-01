@@ -89,6 +89,11 @@ mod tests {
                 right: 0.88,
                 bottom: 0.92,
             },
+            auto_profile_enabled: true,
+            app_profile_rules: vec![aircontrol_core::app_profile::AppProfileRule {
+                executable: "editor.exe".to_owned(),
+                profile_id: "presentation".to_owned(),
+            }],
             ..UserPreferences::default()
         };
         let saved = save_to_path(&path, requested.clone()).expect("save preferences");

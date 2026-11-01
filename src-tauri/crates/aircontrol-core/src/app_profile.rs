@@ -40,6 +40,27 @@ pub fn resolve_profile_id(
         .map(|profile| profile.id.clone())
 }
 
+pub fn preferences_for_executable(
+    preferences: UserPreferences,
+    executable: Option<&str>,
+) -> UserPreferences {
+    let Some(executable) = executable else {
+        return preferences;
+    };
+    let Some(profile_id) = resolve_profile_id(
+        preferences.auto_profile_enabled,
+        executable,
+        &preferences.app_profile_rules,
+        &preferences.profiles,
+    ) else {
+        return preferences;
+    };
+    preferences
+        .clone()
+        .select_profile(&profile_id)
+        .unwrap_or(preferences)
+}
+
 pub fn validate_app_profile_rules(preferences: &UserPreferences) -> Result<(), String> {
     if preferences.app_profile_rules.len() > 64 {
         return Err("At most 64 application profile rules can be saved.".to_owned());
@@ -113,22 +134,29 @@ mod tests {
 
     #[test]
     fn profile_rule_validation_rejects_duplicates_and_deleted_targets() {
-        let mut preferences = UserPreferences::default();
-        preferences.app_profile_rules = vec![
-            AppProfileRule {
-                executable: "Editor.exe".into(),
-                profile_id: "presentation".into(),
-            },
-            AppProfileRule {
-                executable: r"C:\\Tools\\editor.EXE".into(),
-                profile_id: "custom".into(),
-            },
-        ];
-        assert!(preferences.validate_profiles().is_err());
+        let duplicates = UserPreferences {
+            app_profile_rules: vec![
+                AppProfileRule {
+                    executable: "Editor.exe".into(),
+                    profile_id: "presentation".into(),
+                },
+                AppProfileRule {
+                    executable: r"C:\\Tools\\editor.EXE".into(),
+                    profile_id: "custom".into(),
+                },
+            ],
+            ..UserPreferences::default()
+        };
+        assert!(duplicates.validate_profiles().is_err());
 
-        preferences.app_profile_rules.truncate(1);
-        preferences.app_profile_rules[0].profile_id = "deleted-profile".into();
-        assert!(preferences.validate_profiles().is_err());
+        let dangling = UserPreferences {
+            app_profile_rules: vec![AppProfileRule {
+                executable: "editor.exe".into(),
+                profile_id: "deleted-profile".into(),
+            }],
+            ..UserPreferences::default()
+        };
+        assert!(dangling.validate_profiles().is_err());
     }
 
     #[test]
@@ -138,5 +166,25 @@ mod tests {
         assert!(!preferences.auto_profile_enabled);
         assert!(preferences.app_profile_rules.is_empty());
         assert_eq!(ProfileSettings::default().cursor_sensitivity, 1.0);
+    }
+
+    #[test]
+    fn executable_selection_applies_a_mapped_profile_and_preserves_fallbacks() {
+        let preferences = UserPreferences {
+            auto_profile_enabled: true,
+            app_profile_rules: vec![AppProfileRule {
+                executable: "editor.exe".into(),
+                profile_id: "presentation".into(),
+            }],
+            ..UserPreferences::default()
+        };
+        let selected = super::preferences_for_executable(preferences.clone(), Some("EDITOR.EXE"));
+        assert_eq!(selected.active_profile_id, "presentation");
+        assert!(selected.app_switch_enabled);
+
+        let fallback = super::preferences_for_executable(preferences.clone(), Some("unknown.exe"));
+        assert_eq!(fallback, preferences);
+        let unavailable = super::preferences_for_executable(preferences.clone(), None);
+        assert_eq!(unavailable, preferences);
     }
 }
