@@ -1,6 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { create } from "zustand";
-import type { RuntimeSnapshot } from "../domain/runtimeStatus";
+import type { CameraDevice } from "../domain/camera";
+import type { CameraState, RuntimeSnapshot } from "../domain/runtimeStatus";
 import type { UserPreferences } from "../domain/userPreferences";
 
 type RuntimeConnection = "preview" | "connected" | "error";
@@ -12,6 +13,10 @@ interface RuntimeStore {
   error: string | null;
   refresh: () => Promise<void>;
   savePreferences: (preferences: UserPreferences) => Promise<boolean>;
+  listCameras: () => Promise<CameraDevice[] | null>;
+  startCamera: (deviceId: string) => Promise<boolean>;
+  stopCamera: () => Promise<boolean>;
+  setCameraState: (camera: CameraState) => void;
 }
 
 const initialPreferences: UserPreferences = {
@@ -58,4 +63,39 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       return false;
     }
   },
+  listCameras: async () => {
+    if (!isTauri()) return null;
+    try {
+      const cameras = await invoke<CameraDevice[]>("list_cameras");
+      return cameras;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : String(error) });
+      return null;
+    }
+  },
+  startCamera: async (deviceId) => {
+    if (!isTauri()) return false;
+    try {
+      await invoke("start_camera", { deviceId });
+      set({ error: null });
+      return true;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : String(error) });
+      return false;
+    }
+  },
+  stopCamera: async () => {
+    if (!isTauri()) return false;
+    try {
+      await invoke("stop_camera");
+      set({ error: null });
+      return true;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : String(error) });
+      return false;
+    }
+  },
+  setCameraState: (camera) => set((state) => ({
+    status: state.status ? { ...state.status, camera } : null,
+  })),
 }));

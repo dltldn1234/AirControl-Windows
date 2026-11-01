@@ -10,13 +10,14 @@ describe("AirControl desktop shell", () => {
     expect(screen.getByRole("button", { name: /Start control/ })).toBeDisabled();
   });
 
-  it("navigates to feature information without pretending unavailable features work", () => {
+  it("shows the camera setup without pretending browser preview has hardware access", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Camera & tracking" }));
 
     expect(screen.getByRole("heading", { level: 1, name: "Camera & tracking" })).toBeInTheDocument();
-    expect(screen.getByText("IN DEVELOPMENT")).toBeInTheDocument();
-    expect(screen.getByText(/No simulated controls are shown/)).toBeInTheDocument();
+    expect(screen.getByText("Camera preview is off")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Find cameras" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Start preview" })).toBeDisabled();
   });
 });
