@@ -25,13 +25,12 @@
 - Frontend typecheck and production build: passed.
 - Vitest: 4 passed.
 - Playwright Chromium: 2 passed.
-- Windows runner CI: not run yet; requires the branch to be pushed and a PR opened.
+- Windows runner CI: passed on PR #2 (Rust formatting/tests/Clippy, frontend build/unit tests, Playwright, and Windows executable build).
 - Windows Tauri executable, camera capture, and system input: not tested on this macOS host.
 
 ## In progress
 
-- Phase 1 foundation: local implementation is ready for Windows CI validation and review.
-- Establishing the first `main` commit so the feature branch can be reviewed through a pull request.
+- Phase 1 foundation: implementation and Windows CI validation are complete; PR #2 is ready to merge.
 
 ## Not implemented
 
@@ -42,6 +41,5 @@
 
 ## Next
 
-1. Run the native Tauri host build where supported and verify the Windows workflow through GitHub Actions.
-2. Fix Windows CI failures before merging.
-3. Plan camera capture and hand inference as separately scoped issues after the foundation review.
+1. Merge PR #2 after the successful Windows CI run.
+2. Plan camera capture and hand inference as separately scoped issues after the foundation review.
