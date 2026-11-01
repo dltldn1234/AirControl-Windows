@@ -7,9 +7,9 @@
 - Removed AirControl's local Caps Lock state because it cannot represent the target app's global Windows toggle state. The key still emits the Caps Lock virtual key.
 - Shift feedback now follows native keyboard session transitions and clears when tracking is lost; accepted keys, layout selection, and mode stop share a tested feedback reducer.
 - English/Korean is labeled as a keycap legend selection. UI copy states that AirControl does not inspect the foreground application's IME state and directs users to that application's indicator.
-- Local verification: Rust workspace 67 tests passed, rustfmt passed, Clippy with warnings denied passed; frontend typecheck passed, Vitest 16 passed, Vite production build passed, Playwright Chromium 4 passed.
+- Local verification: Rust workspace 68 tests passed, rustfmt passed, Clippy with warnings denied passed; frontend typecheck passed, Vitest 16 passed, Vite production build passed, Playwright Chromium 4 passed.
 - Windows CI and manual Windows overlay/focus, global Caps Lock, and Korean IME behavior remain to be verified.
-- This branch has 2 implementation/test commits so far; the main baseline is 59 commits.
+- This branch has 4 implementation/test commits plus this progress update; the main baseline is 59 commits.
 
 ## Current state (2026-11-01, Issue #13)
 
