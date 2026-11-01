@@ -46,7 +46,6 @@ pub struct KeyStroke {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct KeyboardSession {
     shift_armed: bool,
-    caps_lock: bool,
     layout: KeyboardLayout,
 }
 
@@ -59,13 +58,8 @@ impl KeyboardSession {
         self.shift_armed
     }
 
-    pub fn caps_lock(self) -> bool {
-        self.caps_lock
-    }
-
     pub fn reset(&mut self) {
         self.shift_armed = false;
-        self.caps_lock = false;
         self.layout = KeyboardLayout::English;
     }
 
@@ -79,13 +73,10 @@ impl KeyboardSession {
                 self.shift_armed = !self.shift_armed;
                 Ok(None)
             }
-            "caps" => {
-                self.caps_lock = !self.caps_lock;
-                Ok(Some(KeyStroke {
-                    virtual_key: VK_CAPITAL,
-                    shift: false,
-                }))
-            }
+            "caps" => Ok(Some(KeyStroke {
+                virtual_key: VK_CAPITAL,
+                shift: false,
+            })),
             "layout" => {
                 self.layout = match self.layout {
                     KeyboardLayout::English => KeyboardLayout::Korean,
@@ -254,12 +245,18 @@ mod tests {
     }
 
     #[test]
-    fn shift_is_one_shot_and_caps_lock_is_forwarded_to_windows() {
+    fn shift_is_one_shot_and_caps_lock_only_sends_a_windows_toggle_key() {
         let mut keyboard = KeyboardSession::default();
         keyboard.press("shift").unwrap();
         assert!(keyboard.press("a").unwrap().unwrap().shift);
         assert!(!keyboard.shift_armed());
-        keyboard.press("caps").unwrap();
+        assert_eq!(
+            keyboard.press("caps").unwrap(),
+            Some(KeyStroke {
+                virtual_key: VK_CAPITAL,
+                shift: false
+            })
+        );
         assert!(!keyboard.press("a").unwrap().unwrap().shift);
         keyboard.press("shift").unwrap();
         assert!(keyboard.press("a").unwrap().unwrap().shift);
