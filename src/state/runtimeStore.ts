@@ -16,6 +16,8 @@ interface RuntimeStore {
   listCameras: () => Promise<CameraDevice[] | null>;
   startCamera: (deviceId: string) => Promise<boolean>;
   stopCamera: () => Promise<boolean>;
+  setCursorControl: (enabled: boolean) => Promise<boolean>;
+  setRuntimeStatus: (status: RuntimeSnapshot) => void;
   setCameraState: (camera: CameraState) => void;
   setHandTrackingState: (state: HandTrackingState) => void;
 }
@@ -96,6 +98,18 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       return false;
     }
   },
+  setCursorControl: async (enabled) => {
+    if (!isTauri()) return false;
+    try {
+      await invoke("set_cursor_control", { enabled });
+      set({ error: null });
+      return true;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : String(error) });
+      return false;
+    }
+  },
+  setRuntimeStatus: (status) => set({ status }),
   setCameraState: (camera) => set((state) => ({
     status: state.status ? { ...state.status, camera } : null,
   })),

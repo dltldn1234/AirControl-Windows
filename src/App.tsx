@@ -2,7 +2,6 @@ import {
   Activity,
   AlertTriangle,
   AppWindow,
-  ArrowUpRight,
   Camera,
   Check,
   ChevronRight,
@@ -23,6 +22,7 @@ import {
   WandSparkles,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useRuntimeStore } from "./state/runtimeStore";
 import type { RuntimeSnapshot } from "./domain/runtimeStatus";
@@ -99,12 +99,24 @@ function RuntimeUnavailable() {
   );
 }
 
-function Overview({ status }: { status: RuntimeSnapshot | null }) {
+function Overview({
+  status,
+  connection,
+  error,
+  setCursorControl,
+}: {
+  status: RuntimeSnapshot | null;
+  connection: "preview" | "connected" | "error";
+  error: string | null;
+  setCursorControl: (enabled: boolean) => Promise<boolean>;
+}) {
   const camera = status?.camera ?? "unavailable";
   const tracking = status?.handTracking ?? "waiting";
   const mode = status?.controlMode ?? "disabled";
   const gesture = status?.activeGesture ?? "none";
   const fps = status?.framesPerSecond;
+  const isEnabled = mode === "cursor";
+  const canEnable = connection === "connected" && camera === "running" && tracking === "detected";
 
   return (
     <>
@@ -134,9 +146,17 @@ function Overview({ status }: { status: RuntimeSnapshot | null }) {
 
       <section className="status-grid" aria-label="System status">
         <StatusCard icon={Camera} label="CAMERA" value={cameraLabel(camera)} detail={camera === "running" ? "Capture is active" : "Waiting for camera service"} />
-        <StatusCard icon={Hand} label="HAND TRACKING" value={trackingLabel(tracking)} detail={tracking === "detected" ? "Palm found; pose inference is active" : "No hand landmarks received"} />
+        <StatusCard icon={Hand} label="HAND TRACKING" value={trackingLabel(tracking)} detail={tracking === "detected" ? "Palm and all 21 joints are tracked" : tracking === "palmDetected" ? "Palm found; waiting for confident joints" : "No hand landmarks received"} />
         <StatusCard icon={MousePointer2} label="CONTROL MODE" value={mode === "disabled" ? "Off" : mode} detail={mode === "disabled" ? "No system input is being sent" : "Explicitly enabled"} />
         <StatusCard icon={WandSparkles} label="GESTURE" value={gestureLabel(gesture)} detail={fps == null ? "FPS unavailable" : `${fps.toFixed(0)} frames per second`} />
+      </section>
+
+      <section className="control-panel" aria-label="Cursor control">
+        <div><h2>Cursor control</h2><p>{isEnabled ? "Hand landmarks currently control the Windows pointer." : "Control starts only after a camera and confident hand pose are available."}</p></div>
+        <button type="button" className={isEnabled ? "secondary-button" : "primary-button"} disabled={!isEnabled && !canEnable} onClick={() => void setCursorControl(!isEnabled)}>
+          {isEnabled ? "Stop cursor control" : "Start cursor control"}
+        </button>
+        {error && <p className="camera-message error" role="alert">{error}</p>}
       </section>
 
       <div className="section-heading next-heading">
@@ -318,9 +338,22 @@ function SettingsSection({
 
 export default function App() {
   const [activeSection, setActiveSection] = useState("Overview");
-  const { status, preferences, connection, error, refresh, savePreferences, listCameras, startCamera, stopCamera, setCameraState, setHandTrackingState } = useRuntimeStore();
+  const { status, preferences, connection, error, refresh, savePreferences, listCameras, startCamera, stopCamera, setCursorControl, setRuntimeStatus, setCameraState, setHandTrackingState } = useRuntimeStore();
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let unlisten: UnlistenFn | undefined;
+    void listen<RuntimeSnapshot>("runtime-status", (event) => setRuntimeStatus(event.payload)).then((stopListening) => {
+      if (disposed) stopListening();
+      else unlisten = stopListening;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [setRuntimeStatus]);
 
   return (
     <div className="app-shell">
@@ -345,8 +378,8 @@ export default function App() {
       <main className="main-area">
         <header className="topbar"><div className="breadcrumbs"><span>AirControl</span><ChevronRight size={14} /><strong>{activeSection}</strong></div><div className="topbar-actions"><span className={`runtime-chip ${connection}`}><span />{connection === "connected" ? "Runtime connected" : "Preview mode"}</span><button className="icon-button" type="button" aria-label="Keyboard shortcuts"><Command size={16} /></button><span className="topbar-avatar">D</span></div></header>
         <div className="content-scroll">
-          <div className="page-title-row"><div><div className="eyebrow page-eyebrow">{activeSection === "Overview" ? "YOUR WORKSPACE" : "AIRCONTROL"}</div><h1>{activeSection}</h1><p>{sectionDescriptions[activeSection]}</p></div>{activeSection === "Overview" ? <button className="primary-button" type="button" disabled title="Camera and control services are not available yet"><span className="button-status" /> Start control <ArrowUpRight size={15} /></button> : <span className="phase-badge">FOUNDATION PHASE</span>}</div>
-          {activeSection === "Overview" ? <Overview status={status} /> : activeSection === "Settings" ? <SettingsSection connection={connection} initialPreferences={preferences} savePreferences={savePreferences} /> : activeSection === "Camera & tracking" ? <CameraSection connection={connection} cameraState={status?.camera ?? "unavailable"} handTrackingState={status?.handTracking ?? "waiting"} error={error} listCameras={listCameras} startCamera={startCamera} stopCamera={stopCamera} setCameraState={setCameraState} setHandTrackingState={setHandTrackingState} /> : <PlannedSection title={activeSection} />}
+          <div className="page-title-row"><div><div className="eyebrow page-eyebrow">{activeSection === "Overview" ? "YOUR WORKSPACE" : "AIRCONTROL"}</div><h1>{activeSection}</h1><p>{sectionDescriptions[activeSection]}</p></div><span className="phase-badge">{activeSection === "Overview" ? "LOCAL FIRST" : "IN DEVELOPMENT"}</span></div>
+          {activeSection === "Overview" ? <Overview status={status} connection={connection} error={error} setCursorControl={setCursorControl} /> : activeSection === "Settings" ? <SettingsSection connection={connection} initialPreferences={preferences} savePreferences={savePreferences} /> : activeSection === "Camera & tracking" ? <CameraSection connection={connection} cameraState={status?.camera ?? "unavailable"} handTrackingState={status?.handTracking ?? "waiting"} error={error} listCameras={listCameras} startCamera={startCamera} stopCamera={stopCamera} setCameraState={setCameraState} setHandTrackingState={setHandTrackingState} /> : <PlannedSection title={activeSection} />}
           <footer className="page-footer"><span>AirControl for Windows <span className="footer-divider">·</span> Foundation build</span><span>Local processing <span className="footer-divider">·</span> No cloud connection</span></footer>
         </div>
       </main>

@@ -77,6 +77,11 @@ h1 { margin-bottom:5px; color:#f1f2f5; font-size:24px; font-weight:610; letter-s
 .runtime-notice strong { display:block; color:#dfd8ce; font-size:11px; font-weight:570; }
 .runtime-notice p { margin:4px 0 0; color:#9c9690; font-size:10px; line-height:1.45; }
 .status-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+.control-panel { display:flex; align-items:center; flex-wrap:wrap; gap:16px; margin-top:16px; padding:16px 18px; border:1px solid #2d3038; border-radius:9px; background:#191b20; }
+.control-panel > div { flex:1 1 280px; }
+.control-panel h2 { margin:0 0 5px; color:#e7e9ee; font-size:13px; font-weight:600; }
+.control-panel p { margin:0; color:#999fac; font-size:10px; line-height:1.5; }
+.control-panel .camera-message { flex-basis:100%; min-height:0; margin:0; }
 .status-card { display:flex; min-height:112px; flex-direction:column; padding:13px 14px 12px; border:1px solid #2d3038; border-radius:8px; background:#191b20; }
 .status-card-top { display:flex; align-items:center; gap:7px; margin-bottom:13px; }
 .status-icon { color:#9ca9c0; display:inline-flex; }

@@ -7,7 +7,7 @@ describe("AirControl desktop shell", () => {
     render(<App />);
 
     expect(screen.getByText("Desktop runtime is not connected")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Start control/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Start cursor control/ })).toBeDisabled();
   });
 
   it("shows the camera setup without pretending browser preview has hardware access", () => {
