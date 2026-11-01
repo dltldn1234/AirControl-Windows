@@ -5,7 +5,7 @@
 - Baseline commit count: 0 (empty repository at project start)
 - Current `main` commit count: 28 after the ordinary merge of PR #8.
 - Current issue: [#10 — Implement safe Windows window and app controls](https://github.com/dltldn1234/AirControl-Windows/issues/10)
-- Current branch: `10-feat/windows-window-controls` (10 commits ahead of `main`; 36 commits reachable from this branch HEAD).
+- Current branch: `10-feat/windows-window-controls` (13 commits ahead of `main`; 39 commits reachable from this branch HEAD after the current progress update).
 - Active stack: Rust, Tauri 2, React, TypeScript, Vite, Tailwind CSS
 
 ## Completed
@@ -90,7 +90,8 @@
 - Issue: [#10 — Implement safe Windows window and app controls](https://github.com/dltldn1234/AirControl-Windows/issues/10). Work is isolated in `10-feat/windows-window-controls`, stacked on the Issue #9 branch until PR #11 merges.
 - Added pure tested window movement/resize geometry, size constraints, supported-window eligibility, and a pinch-to-move state machine with hysteresis and tracking-loss reset.
 - Added Windows-only visible top-level window enumeration, filtering for hidden/owned/cloaked/tool/self windows, hex-string HWND transport to avoid JavaScript integer precision loss, and validated activation/move/resize/minimize/maximize commands. Protected/unsupported windows fail closed; foreground restrictions are reported without bypass.
-- Added explicit camera-and-pose-gated Window mode. The user chooses a window and activates hand control; an index pinch moves only that target. Cursor control and window control cannot be enabled at the same time. Stop, tracking loss, inference errors, and camera shutdown end the mode.
+- Added explicit camera-and-pose-gated Window mode. The user chooses a window and activates hand control; an index pinch moves only that target, while the distance between two tracked index fingertips scales it around its original center. Losing either hand ends resize immediately. Cursor control and window control cannot be enabled at the same time. Stop, tracking loss, inference errors, and camera shutdown end the mode.
 - Added a working Window Control panel with list/selection, activate/minimize/maximize, explicit keyboard-button move/resize actions, and hand-move start/stop. Added a persisted window-movement sensitivity setting with a default for old preference files.
-- Issue #10 local verification: Rust workspace tests 56 passed, Clippy with warnings denied and formatting passed; frontend typecheck passed, Vitest 5 passed, Vite build passed, Playwright Chromium 3 passed. Windows API compilation and native controls await Windows CI after PR #11 merges; actual window behavior requires a Windows PC.
-- Five Issue #10 commits are recorded locally (`531443b`, `d66f5cf`, `649b7d7`, `00e5271`, plus this progress update). They have not been pushed or opened as a PR yet.
+- Issue #10 local verification after two-hand resize: Rust workspace tests 59 passed, Clippy with warnings denied and formatting passed; frontend typecheck passed, Vitest 5 passed, Vite build passed, Playwright Chromium 3 passed. Windows API compilation and native controls await Windows CI after PR #11 merges; actual window behavior requires a Windows PC.
+- Two-hand resize uses a normalized-distance recognizer with a dead zone, sensitivity clamp, scale clamp, original-rectangle sizing, and immediate reset on tracking loss. The runtime status and Window Control instructions now identify resize mode.
+- Issue #10 work remains stacked on Issue #9 and has not yet been opened as a PR. The two resize commits are `ccc3976` (core recognition) and `ecd0dbb` (native window integration and status UI).
