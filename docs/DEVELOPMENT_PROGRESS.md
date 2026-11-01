@@ -1,5 +1,15 @@
 # Development Progress
 
+## Current state (2026-11-01, Issue #13)
+
+- `main` baseline: 50 commits at `f16f47cdf3af38948ee155e99c5e98185fd0e7fc` (PR #12 merge); Issue #13 branch `13-feat/air-keyboard` began from that head.
+- Issue: [#13 — Implement safe Air Keyboard input](https://github.com/dltldn1234/AirControl-Windows/issues/13).
+- Air Keyboard implementation is in progress on this branch: non-focusable floating Tauri surface, opt-in camera-gated mode, hand cursor movement with a short-pinch-only click recognizer restricted to the live keyboard window bounds, Rust allow-listed key events, English QWERTY and Korean Dubeolsik legends, and Shift/Caps/IME/editing controls.
+- Key-event dispatch is denied outside Air Keyboard mode and when the floating surface is hidden. No typed content is stored or logged. Modifier state resets on tracking loss, camera stop, mode stop, and inference/input errors.
+- Local checks on macOS: Rust workspace tests 67 passed, rustfmt passed, Clippy with warnings denied passed, frontend typecheck passed, Vitest 9 passed, Vite production build passed, Playwright Chromium 4 passed.
+- Windows CI has not yet checked this branch. The non-activating overlay, target-app focus retention, actual `SendInput`, webcam selection, and Korean IME composition still require Windows runner/device validation; automatic tests do not establish those behaviors.
+- At branch start, `main` was 50 commits. Six scoped Air Keyboard implementation and safety commits are present locally; the final docs/progress commit is pending after the last verification.
+
 ## Repository baseline
 
 - Baseline commit count: 0 (empty repository at project start)
