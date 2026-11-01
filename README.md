@@ -49,6 +49,10 @@ npm run test:e2e
 React does not generate operating-system input. Cursor, window, and keyboard control belongs in Rust services behind explicit readiness and user activation gates.
 Named control profiles and optional executable-to-profile mappings are stored locally; see [control profiles](docs/CONTROL_PROFILES.md).
 
+## Air Command Palette
+
+Open **Command palette** from the dashboard after starting the camera and waiting for all 21 hand landmarks. The index fingertip hovers over a 3-by-2 command grid; a short thumb-index pinch confirms one command. Hold a fist for about 650 ms, press Escape, or stop tracking to cancel. The palette is exclusive with cursor, window, and keyboard modes. Its allowlisted commands switch to the next eligible app window, focus and snap an eligible window left or right, toggle media playback, and adjust media volume. Windows can decline activation or injected input for protected or higher-integrity apps; AirControl does not bypass those restrictions. Buttons in the palette remain keyboard-accessible, and they are disabled in browser preview.
+
 ## Privacy and safety
 
 - Camera frames and typed text must remain local and must not be logged.
