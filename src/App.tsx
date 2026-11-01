@@ -26,6 +26,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useRuntimeStore } from "./state/runtimeStore";
 import type { RuntimeSnapshot } from "./domain/runtimeStatus";
+import { DEFAULT_CURSOR_CALIBRATION, moveCalibrationEdge } from "./domain/cursorCalibration";
 import type { CameraDevice, CameraFrame, CameraStatusEvent, HandTrackingStatusEvent } from "./domain/camera";
 import type { UserPreferences } from "./domain/userPreferences";
 import type { WindowInfo } from "./domain/window";
@@ -325,19 +326,14 @@ function SettingsSection({
   }
 
   function updateCalibration(edge: "left" | "top" | "right" | "bottom", value: number) {
-    const bounds = { ...preferences.cursorCalibration };
-    const minimumSpan = 0.15;
-    if (edge === "left") bounds.left = Math.min(value, bounds.right - minimumSpan);
-    if (edge === "right") bounds.right = Math.max(value, bounds.left + minimumSpan);
-    if (edge === "top") bounds.top = Math.min(value, bounds.bottom - minimumSpan);
-    if (edge === "bottom") bounds.bottom = Math.max(value, bounds.top + minimumSpan);
+    const bounds = moveCalibrationEdge(preferences.cursorCalibration, edge, value);
     setPreferences({ ...preferences, cursorCalibration: bounds });
   }
 
   function resetCalibration() {
     setPreferences({
       ...preferences,
-      cursorCalibration: { left: 0, top: 0, right: 1, bottom: 1 },
+      cursorCalibration: DEFAULT_CURSOR_CALIBRATION,
     });
   }
 
